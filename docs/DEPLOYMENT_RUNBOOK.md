@@ -330,3 +330,5 @@ paths still served.
 - Reports, broadcast, chat, WhatsApp account lifecycle, Google/theme auth, and
   the admin feature-flags/activity-logs pages remain **legacy-only** — see
   `CUTOVER_COVERAGE.md`.
+- Receipt PDFs are generated in the API process (pdfkit + qrcode); `send-receipt`
+  queues a `receipt.send` outbox event for the worker to deliver.

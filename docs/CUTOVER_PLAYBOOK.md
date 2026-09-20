@@ -66,7 +66,8 @@ Read-only / low-blast-radius first; writes and money last.
 | 4 | `products` | Writes inventory; `/products/bulk` stays legacy-only |
 | 5 | `staff` | Staff login + management; see the caveat in §6 |
 | 6 | `admin/users`, `admin/sub-admins`, `admin/stats`, `admin/impersonate` | Admin panel user management. Only these sub-paths route; `/admin/feature-flags` and `/admin/activity-logs` stay legacy |
-| 7 | `payments` | Money movement — last, after everything above is stable |
+| 7 | `orders` | Order lifecycle + receipt PDFs. POS cash sales post to the platform and persist as PAID/DELIVERED |
+| 8 | `payments` | Money movement — last, after everything above is stable |
 
 Widen **one step per release**, with a soak period, not several domains at once.
 

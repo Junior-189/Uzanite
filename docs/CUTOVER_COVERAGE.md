@@ -22,11 +22,11 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Notifications | `/api/notifications`, `/read-all`, delete-all | `/api/v1/notifications`, `/read-all`, `/notifications` | **ROUTED** | — (same shape) |
 | Dashboard | `/api/dashboard/stats` | `/api/v1/dashboard/stats` | **ROUTED** | — (platform module built; same `{success, stats}` shape) |
 | File uploads | — | `POST /api/v1/files` (+ signed `GET /files/:key`) | **READY** | platform module built (`files`); client upload call sites wired during products/payments cutover |
-| Orders (list/get/status actions) | `/api/orders`, `/orders/:id/*` | `/api/v1/orders`, `/orders/:id/*` | **BLOCKED** | receipt endpoints (`/orders/:id/receipt`, `/send-receipt`) still legacy-only; confirm-payment now has an upload path |
+| Orders (list/get/status actions) | `/api/orders`, `/orders/:id/*` | `/api/v1/orders`, `/orders/:id/*` | **READY** | routed; `_id` alias; legacy POS extras accepted (cash → PAID/DELIVERED via manual path); receipts now platform-served |
 | Payments (initiate/manual) | `/api/payments/orders/:id/{initiate,manual}` | `/api/v1/payments/orders/:id/{initiate,manual}` | **PARTIAL** | platform now accepts `proofPath` (upload via `/api/v1/files`); client must upload first and send the key |
 | Products (CRUD/restock) | `/api/products`, `/products/:id/restock` | `/api/v1/products`, `/products/:id/restock` | **READY** | routed (`/products`); responses alias `_id` + signed `imagePath`; client uploads image via `/api/v1/files`; legacy `/products/bulk` (CSV import) stays legacy-only |
 | Categories | (via products) | `/api/v1/categories` | **READY** | client does not call it directly |
-| Receipts | `/api/orders/:id/receipt` | `/api/v1/receipts/order/:orderId` | **BLOCKED** | different path + response envelope |
+| Receipts | `/api/orders/:id/receipt`, `/orders/:id/send-receipt` | same `/api/v1/orders/:id/receipt` (PDF) + `send-receipt` | **READY** | platform renders the receipt PDF (pdfkit + QR) at the legacy path; `send-receipt` queues `receipt.send` |
 | Messaging / WhatsApp | `/api/whatsapp/{status,qr,connect,disconnect,meta/credentials}` | `/api/v1/whatsapp/{account,templates,messages,conversations}` | **BLOCKED** | legacy QR/Baileys connect flow has no platform equivalent; per-tenant credentials shape differs |
 | Contacts | `/api/contacts*` | `/api/v1/contacts` | **READY** | routed; platform module built + tested (CRUD, soft delete/restore, chat history, outbox email) |
 | Chat | `/api/chat/*` | — | **BLOCKED** | not implemented |
@@ -65,6 +65,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites); build **reports, chat, broadcast, admin feature-flags/activity-logs** (contacts, recycle-bin, products, staff, admin users done).
+3. Platform: build **reports, chat, broadcast, admin feature-flags/activity-logs** (contacts, recycle-bin, products, orders+receipts, staff, admin users done).
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).

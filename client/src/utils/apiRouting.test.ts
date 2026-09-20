@@ -51,6 +51,8 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/contacts')).toBe(true);
     expect(m.isRoutedToPlatform('/recycle-bin')).toBe(true);
     expect(m.isRoutedToPlatform('/products')).toBe(true);
+    expect(m.isRoutedToPlatform('/orders')).toBe(true);
+    expect(m.isRoutedToPlatform('/orders/abc/receipt')).toBe(true);
     expect(m.isRoutedToPlatform('/staff')).toBe(true);
     expect(m.isRoutedToPlatform('/staff/login')).toBe(true);
     expect(m.isRoutedToPlatform('/admin/users')).toBe(true);
@@ -96,7 +98,6 @@ describe('apiRouting (Strangler cutover)', () => {
 
   it('does not route domains the platform does not implement yet', async () => {
     const m = await loadWithFlag('true');
-    expect(m.isRoutedToPlatform('/orders')).toBe(false);
     expect(m.isRoutedToPlatform('/broadcast/send')).toBe(false);
     expect(m.isRoutedToPlatform('/chat/send')).toBe(false);
   });

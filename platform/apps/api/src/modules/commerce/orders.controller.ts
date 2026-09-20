@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   createOrderSchema,
@@ -15,6 +15,7 @@ import { EnforceLimit, RequirePlanFeature } from '../../decorators/plan.decorato
 import { CurrentUser, TenantId } from '../../decorators/principal.decorator';
 import { Principal } from '../../context/tenant-context';
 import { ZodValidationPipe } from '../../pipes/zod-validation.pipe';
+import { ReceiptsService } from '../receipts/receipts.service';
 import { OrdersService } from './orders.service';
 
 @ApiTags('orders')
@@ -24,7 +25,10 @@ import { OrdersService } from './orders.service';
 @RateLimit({ limit: 180, windowSeconds: 60, keyPrefix: 'orders', scope: 'tenant' })
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly receipts: ReceiptsService
+  ) {}
 
   private actor(principal: Principal, override?: string): string {
     if (override?.trim()) return override.trim();
@@ -55,15 +59,34 @@ export class OrdersController {
     return this.orders.get(tenantId, params.id);
   }
 
+  // Legacy-compatible receipt download: returns a PDF attachment.
+  @Get(':id/receipt')
+  @RequirePermission('orders')
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="receipt.pdf"')
+  receipt(@TenantId() tenantId: string, @Param(new ZodValidationPipe(orderIdParam)) params: { id: string }) {
+    return this.receipts.pdfForOrder(tenantId, params.id);
+  }
+
+  @Post(':id/send-receipt')
+  @RequirePermission('orders')
+  sendReceipt(@TenantId() tenantId: string, @Param(new ZodValidationPipe(orderIdParam)) params: { id: string }) {
+    return this.receipts.sendReceipt(tenantId, params.id);
+  }
+
   @Post()
   @RequirePermission('orders')
   @EnforceLimit('ordersPerMonth')
   create(
     @TenantId() tenantId: string,
     @CurrentUser() principal: Principal,
-    @Body(new ZodValidationPipe(createOrderSchema)) body: { recordedBy?: string } & Record<string, unknown>
+    @Body(new ZodValidationPipe(createOrderSchema)) body: { recordedBy?: string; source?: string } & Record<string, unknown>
   ) {
-    return this.orders.create(tenantId, body as never, this.actor(principal, body.recordedBy));
+    const actor = this.actor(principal, body.recordedBy);
+    // Legacy POS posts cash sales to the generic endpoint expecting them to be
+    // persisted as PAID + DELIVERED — route those through the manual path.
+    if (body.source === 'cash') return this.orders.createManual(tenantId, body as never, actor);
+    return this.orders.create(tenantId, body as never, actor);
   }
 
   @Post('manual')

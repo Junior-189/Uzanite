@@ -2,11 +2,12 @@ import { Module } from '@nestjs/common';
 import { CatalogModule } from '../catalog/catalog.module';
 import { BillingModule } from '../billing/billing.module';
 import { LedgerModule } from '../finance/ledger.module';
+import { ReceiptsModule } from '../receipts/receipts.module';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 
 @Module({
-  imports: [CatalogModule, BillingModule, LedgerModule],
+  imports: [CatalogModule, BillingModule, LedgerModule, ReceiptsModule],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],
