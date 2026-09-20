@@ -5,3 +5,4 @@ coverage
 *.log
 .turbo
 apps/api/generated
+private_uploads_platform

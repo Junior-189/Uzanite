@@ -45,6 +45,8 @@ process.env.JWT_ACCESS_TTL = process.env.JWT_ACCESS_TTL || '15m';
 process.env.JWT_REFRESH_TTL_DAYS = process.env.JWT_REFRESH_TTL_DAYS || '30';
 process.env.APP_URL = process.env.APP_URL || 'http://localhost:4000';
 process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-encryption-key-0123456789abcdef0123456789abcdef';
+process.env.STORAGE_SIGNING_SECRET = process.env.STORAGE_SIGNING_SECRET || 'test-storage-signing-secret-0123456789abcdef';
+process.env.STORAGE_LOCAL_DIR = process.env.STORAGE_LOCAL_DIR || 'private_uploads_test_platform';
 
 export interface Harness {
   prisma: PrismaService;
@@ -97,7 +99,7 @@ export async function createHarness(): Promise<Harness> {
  * suite unreliable.
  */
 export async function resetDb(prisma: PrismaService): Promise<void> {
-  await truncateWithRetry((sql) => prisma.base.$executeRawUnsafe(sql), 'TRUNCATE "outbox_events","activity_logs","feature_flags","usage_counters","subscriptions","tenant_payment_methods","tenant_settings","memberships","membership_invites","refresh_tokens","password_reset_tokens","login_attempts","flow_traces","conversations","webhook_events","messages","whatsapp_contacts","whatsapp_templates","whatsapp_accounts","receipts","notifications","refunds","journal_lines","journal_entries","ledger_entries","payment_attempts","payments","order_status_history","order_items","orders","order_counters","stock_movements","products","categories","privacy_requests","identity_aliases","users","tenants" RESTART IDENTITY CASCADE');
+  await truncateWithRetry((sql) => prisma.base.$executeRawUnsafe(sql), 'TRUNCATE "outbox_events","activity_logs","feature_flags","usage_counters","subscriptions","tenant_payment_methods","tenant_settings","memberships","membership_invites","refresh_tokens","password_reset_tokens","login_attempts","flow_traces","conversations","webhook_events","messages","whatsapp_contacts","whatsapp_templates","whatsapp_accounts","receipts","notifications","refunds","journal_lines","journal_entries","ledger_entries","payment_attempts","payments","order_status_history","order_items","orders","order_counters","stock_movements","products","categories","privacy_requests","stored_files","identity_aliases","users","tenants" RESTART IDENTITY CASCADE');
   // Seed the real plan catalogue: empty limits/features used to make every
   // entitlement test vacuously pass, which is how the plan-limit bugs survived.
   for (const plan of PLAN_CATALOGUE) {

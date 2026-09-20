@@ -45,6 +45,8 @@ import { MessagingModule } from './modules/messaging/messaging.module';
 import { ConversationModule } from './modules/conversation/conversation.module';
 import { HealthModule } from './modules/health/health.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
+import { FilesModule } from './modules/files/files.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -125,6 +127,8 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
     MessagingModule,
     ConversationModule,
     PrivacyModule,
+    FilesModule,
+    DashboardModule,
     HealthModule,
   ],
   providers: [

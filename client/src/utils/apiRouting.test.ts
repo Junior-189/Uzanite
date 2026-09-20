@@ -38,6 +38,7 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/notifications')).toBe(true);
     expect(m.isRoutedToPlatform('/tenants/me')).toBe(true);
     expect(m.isRoutedToPlatform('/billing/plans')).toBe(true);
+    expect(m.isRoutedToPlatform('/dashboard/stats')).toBe(true);
   });
 
   it('does not route domains the platform does not implement yet', async () => {

@@ -216,6 +216,7 @@ model Tenant {
 
   notifications Notification[]
   receipts      Receipt[]
+  storedFiles   StoredFile[]
 
   whatsappAccounts   WhatsAppAccount[]
   whatsappTemplates  WhatsAppTemplate[]
@@ -884,6 +885,28 @@ model Receipt {
   @@index([tenantId, orderId])
   @@index([tenantId, paymentId])
   @@map("receipts")
+}
+
+// Private file metadata (Phase M15 / Batch F). Bytes live in local/S3 storage;
+// this row is the tenant-scoped record used to authorize signed downloads. The
+// `key` is opaque and globally unique.
+model StoredFile {
+  id           String    @id @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  key          String    @unique
+  originalName String    @map("original_name")
+  contentType  String    @map("content_type")
+  size         Int
+  purpose      String    @default("other")
+  recordedBy   String    @default("") @map("recorded_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, purpose])
+  @@map("stored_files")
 }
 
 // ── Messaging (Phase M7) ─────────────────────────────────────────────────────

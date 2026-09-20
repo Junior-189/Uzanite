@@ -26,6 +26,8 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   // Notifications & Receipts (Phase M6)
   'Notification',
   'Receipt',
+  // Files (Phase M15)
+  'StoredFile',
   // Messaging (Phase M7)
   'WhatsAppAccount',
   'WhatsAppTemplate',

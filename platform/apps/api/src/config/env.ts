@@ -69,6 +69,15 @@ export const envSchema = z
     // `x-metrics-token` or `?token=`). When unset, /metrics is only exposed in
     // non-production environments.
     METRICS_TOKEN: z.string().optional().default(''),
+    // Private file storage (product images, payment proofs). Local disk by
+    // default; S3/R2 can be added behind the same interface.
+    STORAGE_PROVIDER: z.enum(['local', 's3']).optional().default('local'),
+    STORAGE_LOCAL_DIR: z.string().optional().default('private_uploads_platform'),
+    // HMAC secret for signed download URLs. Falls back to ENCRYPTION_KEY then
+    // JWT_SECRET when unset (a warning is logged).
+    STORAGE_SIGNING_SECRET: z.string().optional().default(''),
+    STORAGE_URL_TTL_SECONDS: z.coerce.number().int().default(900),
+    MAX_UPLOAD_BYTES: z.coerce.number().int().default(5 * 1024 * 1024),
     // Observability (all optional — logging-only when unset).
     SENTRY_DSN: z.string().optional().default(''),
     APP_RELEASE: z.string().optional().default('unknown'),

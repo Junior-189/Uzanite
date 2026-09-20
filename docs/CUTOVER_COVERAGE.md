@@ -20,9 +20,11 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Tenancy profile | `/api/businesses`, `/api/businesses/:id` | `/api/v1/tenants/me`, `/tenants/me/payment-methods` | **ROUTED** | adapter: `tenantBridge.ts` |
 | Billing | `/api/billing/plans`, `/billing/status` | `/api/v1/billing/plans`, `/billing/status` | **READY** | client does not call billing yet |
 | Notifications | `/api/notifications`, `/read-all`, delete-all | `/api/v1/notifications`, `/read-all`, `/notifications` | **ROUTED** | — (same shape) |
-| Orders (list/get/status actions) | `/api/orders`, `/orders/:id/*` | `/api/v1/orders`, `/orders/:id/*` | **BLOCKED** | receipt endpoints (`/orders/:id/receipt`, `/send-receipt`) are legacy-only; confirm-payment proof differs |
-| Payments (initiate/manual) | `/api/payments/orders/:id/{initiate,manual}` | `/api/v1/payments/orders/:id/{initiate,manual}` | **BLOCKED** | legacy accepts a multipart **proof image**; platform takes a `proofPath` string and has **no upload endpoint** |
-| Products (CRUD/restock) | `/api/products`, `/products/:id/restock` | `/api/v1/products`, `/products/:id/restock` | **BLOCKED** | legacy `/products/bulk` (CSV import) and multipart image upload are not on the platform |
+| Dashboard | `/api/dashboard/stats` | `/api/v1/dashboard/stats` | **ROUTED** | — (platform module built; same `{success, stats}` shape) |
+| File uploads | — | `POST /api/v1/files` (+ signed `GET /files/:key`) | **READY** | platform module built (`files`); client upload call sites wired during products/payments cutover |
+| Orders (list/get/status actions) | `/api/orders`, `/orders/:id/*` | `/api/v1/orders`, `/orders/:id/*` | **BLOCKED** | receipt endpoints (`/orders/:id/receipt`, `/send-receipt`) still legacy-only; confirm-payment now has an upload path |
+| Payments (initiate/manual) | `/api/payments/orders/:id/{initiate,manual}` | `/api/v1/payments/orders/:id/{initiate,manual}` | **PARTIAL** | platform now accepts `proofPath` (upload via `/api/v1/files`); client must upload first and send the key |
+| Products (CRUD/restock) | `/api/products`, `/products/:id/restock` | `/api/v1/products`, `/products/:id/restock` | **PARTIAL** | platform now supports image uploads via `/api/v1/files`; legacy `/products/bulk` (CSV import) remains platform-missing |
 | Categories | (via products) | `/api/v1/categories` | **READY** | client does not call it directly |
 | Receipts | `/api/orders/:id/receipt` | `/api/v1/receipts/order/:orderId` | **BLOCKED** | different path + response envelope |
 | Messaging / WhatsApp | `/api/whatsapp/{status,qr,connect,disconnect,meta/credentials}` | `/api/v1/whatsapp/{account,templates,messages,conversations}` | **BLOCKED** | legacy QR/Baileys connect flow has no platform equivalent; per-tenant credentials shape differs |
@@ -39,15 +41,27 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 ## What this means
 
-1. **The cutover cannot "finish" by deletion.** ~14 domains the client uses have **no platform implementation**. Completing the migration requires **building** those platform modules (staff/memberships-aligned, admin users, dashboard, reports, recycle-bin, broadcast, chat, contacts, WhatsApp account lifecycle, file uploads) — a multi-week effort, not a delete.
+1. **The cutover cannot "finish" by deletion.** ~12 domains the client uses still have **no platform implementation**. Completing the migration requires **building** those platform modules (staff/memberships-aligned, admin users, reports, recycle-bin, broadcast, chat, contacts, WhatsApp account lifecycle) — a multi-week effort, not a delete.
 2. **Batch D is gated on that build.** Baileys can only be deleted once the platform (or a still-present legacy worker) owns WhatsApp; Mongo/Express can only be deleted once every domain above is cut over and reconciled.
-3. **Uploads are a cross-cutting blocker.** Products (images) and payments (proof) both depend on a private file-upload endpoint on the platform, which does not exist yet. It should be the next platform build item after the auth/tenancy waves.
-4. **Safe next cutovers** once parity passes: billing (already same paths), then products **without** upload/bulk, then orders **without** receipt.
+3. **Uploads are now resolved.** ✅ Platform `POST /api/v1/files` (private, content-sniffed, HMAC-signed downloads) unblocks product images and payment proofs. Wiring the client upload call sites is the remaining client work.
+4. **Dashboard is now resolved.** ✅ Platform `GET /api/v1/dashboard/stats` mirrors the legacy shape and is routed.
+5. **Safe next cutovers** once parity passes: billing (already same paths), then products (with upload; bulk CSV still missing), then payments (with proof upload), then orders (without receipt).
+
+## Progress log
+
+| Item | Status |
+|---|---|
+| Electron | ✅ removed |
+| Platform file uploads (`/api/v1/files`) | ✅ built + tested (migration 0017, `stored_files` RLS) |
+| Platform dashboard (`/api/v1/dashboard/stats`) | ✅ built + tested + routed |
+| Notifications cutover | ✅ routed |
+| Auth / tenancy / billing | ✅ routed / ready |
+| Baileys, Mongo/Express | ⛔ blocked on the remaining platform domains |
 
 ## Recommended order to unblock Batch D
 
-1. Platform: **file uploads** (signed, private) → unblocks products (images) and payments (proof).
-2. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites).
-3. Platform: build **dashboard, reports, recycle-bin, admin users, staff, contacts, chat, broadcast**.
+1. ✅ Platform: file uploads.
+2. ✅ Platform: dashboard.
+3. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites); build **reports, recycle-bin, admin users, staff, contacts, chat, broadcast**.
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).
