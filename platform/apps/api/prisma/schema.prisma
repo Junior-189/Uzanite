@@ -180,8 +180,9 @@ model Tenant {
   slug        String       @unique @db.Citext
   legacyId    String?      @unique @map("legacy_id")
   name        String
-  status      TenantStatus @default(pending)
-  currency    String       @default("TZS") @db.Char(3)
+  status          TenantStatus @default(pending)
+  rejectionReason String       @default("") @map("rejection_reason")
+  currency        String       @default("TZS") @db.Char(3)
   timezone    String       @default("Africa/Dar_es_Salaam")
   phone       String?
   country     String       @default("TZ") @db.Char(2)
@@ -268,6 +269,8 @@ model User {
   avatarUrl          String?       @map("avatar_url")
   authProvider       String        @default("local") @map("auth_provider")
   platformRole       PlatformRole? @map("platform_role")
+  // Granular permissions for platform sub-admins (legacy `SUB_ADMIN_PERMISSIONS`).
+  permissions        String[]      @default([])
   status             UserStatus    @default(active)
   tokenVersion       Int           @default(0) @map("token_version")
   mustChangePassword Boolean       @default(false) @map("must_change_password")

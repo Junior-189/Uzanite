@@ -53,6 +53,18 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/products')).toBe(true);
     expect(m.isRoutedToPlatform('/staff')).toBe(true);
     expect(m.isRoutedToPlatform('/staff/login')).toBe(true);
+    expect(m.isRoutedToPlatform('/admin/users')).toBe(true);
+    expect(m.isRoutedToPlatform('/admin/users/abc/approve')).toBe(true);
+    expect(m.isRoutedToPlatform('/admin/sub-admins')).toBe(true);
+    expect(m.isRoutedToPlatform('/admin/stats')).toBe(true);
+    expect(m.isRoutedToPlatform('/admin/impersonate/abc')).toBe(true);
+  });
+
+  it('keeps un-migrated admin sub-domains on legacy', async () => {
+    const m = await loadWithFlag('true');
+    expect(m.isRoutedToPlatform('/admin/feature-flags')).toBe(false);
+    expect(m.isRoutedToPlatform('/admin/activity-logs')).toBe(false);
+    expect(m.isRoutedToPlatform('/admin/login-attempts')).toBe(false);
   });
 
   it('restricts routing to VITE_API_V1_DOMAINS when set (per-domain rollout)', async () => {
@@ -85,7 +97,6 @@ describe('apiRouting (Strangler cutover)', () => {
   it('does not route domains the platform does not implement yet', async () => {
     const m = await loadWithFlag('true');
     expect(m.isRoutedToPlatform('/orders')).toBe(false);
-    expect(m.isRoutedToPlatform('/admin/users')).toBe(false);
     expect(m.isRoutedToPlatform('/broadcast/send')).toBe(false);
     expect(m.isRoutedToPlatform('/chat/send')).toBe(false);
   });

@@ -6,6 +6,7 @@ export * from './entitlements';
 export * from './privacy';
 export * from './memberships';
 export * from './admin';
+export * from './admin-users';
 export * from './catalog';
 export * from './commerce';
 export * from './dashboard';

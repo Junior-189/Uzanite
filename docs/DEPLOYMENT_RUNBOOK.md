@@ -327,5 +327,6 @@ paths still served.
 - **Local storage is single-host.** Multi-host/autoscaled API requires object
   storage.
 - **No down migrations.** Rollback is restore/PITR based by design.
-- Admin users, reports, broadcast, chat, WhatsApp account lifecycle, and
-  Google/theme auth remain **legacy-only** — see `CUTOVER_COVERAGE.md`.
+- Reports, broadcast, chat, WhatsApp account lifecycle, Google/theme auth, and
+  the admin feature-flags/activity-logs pages remain **legacy-only** — see
+  `CUTOVER_COVERAGE.md`.

@@ -31,8 +31,9 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Contacts | `/api/contacts*` | `/api/v1/contacts` | **READY** | routed; platform module built + tested (CRUD, soft delete/restore, chat history, outbox email) |
 | Chat | `/api/chat/*` | — | **BLOCKED** | not implemented |
 | Staff | `/api/staff*`, `/staff/me` | `/api/v1/staff*` | **READY** | routed; platform module built + tested (email login with `type:'staff'` tokens, owner-only CRUD, permissions, status, reset-password). Staff sessions use access tokens only (no refresh — `refresh_tokens` is FK-bound to users) |
-| Admin (tenants) | `/api/admin/users*` | `/api/v1/admin/tenants*` | **BLOCKED** | different path + shape; platform has no user/sub-admin CRUD |
-| Admin (stats/flags/login-attempts) | `/api/admin/{stats,feature-flags,login-attempts}*` | — | **BLOCKED** | not implemented |
+| Admin (users) | `/api/admin/users*`, `/api/admin/sub-admins*`, `/api/admin/stats`, `/api/admin/impersonate/:id` | `/api/v1/admin/users*` etc. | **READY** | routed sub-paths; platform module built + tested (list/stats, approve/reject/suspend, update name/email, reset-password, delete, impersonate, sub-admin CRUD). Legacy shapes adapted (`_id`, `businessName`, counts) |
+| Admin (feature-flags) | `/api/admin/feature-flags*` | `/api/v1/admin/feature-flags*` (different shape) | **BLOCKED** | platform has flags but keyed `{key,scope}` shape ≠ legacy `{flags:{...}}` map; remains legacy |
+| Admin (activity-logs/login-attempts) | `/api/admin/{activity-logs,login-attempts}*` | — | **BLOCKED** | not implemented; remains legacy |
 | Dashboard | `/api/dashboard/*` | — | **BLOCKED** | not implemented |
 | Reports | `/api/reports/*` | — | **BLOCKED** | not implemented |
 | Recycle bin | `/api/recycle-bin`, `/restore/:type/:id`, `/:type/:id` | `/api/v1/recycle-bin` (same sub-paths, types: orders/products/contacts/notifications) | **READY** | routed; platform module covers all four client tabs |
@@ -41,7 +42,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 ## What this means
 
-1. **The cutover cannot "finish" by deletion.** Several domains the client uses still have **no platform implementation**. Completing the migration requires **building** those platform modules (admin users, reports, broadcast, chat, WhatsApp account lifecycle, Google/theme auth) — a multi-week effort, not a delete.
+1. **The cutover cannot "finish" by deletion.** Several domains the client uses still have **no platform implementation**. Completing the migration requires **building** those platform modules (reports, broadcast, chat, WhatsApp account lifecycle, Google/theme auth, admin feature-flags/activity-logs) — a multi-week effort, not a delete.
 2. **Batch D is gated on that build.** Baileys can only be deleted once the platform (or a still-present legacy worker) owns WhatsApp; Mongo/Express can only be deleted once every domain above is cut over and reconciled.
 3. **Uploads are now resolved.** ✅ Platform `POST /api/v1/files` (private, content-sniffed, HMAC-signed downloads) unblocks product images and payment proofs. Wiring the client upload call sites is the remaining client work.
 4. **Dashboard is now resolved.** ✅ Platform `GET /api/v1/dashboard/stats` mirrors the legacy shape and is routed.
@@ -64,6 +65,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites); build **reports, admin users, chat, broadcast** (contacts, recycle-bin, products, staff done).
+3. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites); build **reports, chat, broadcast, admin feature-flags/activity-logs** (contacts, recycle-bin, products, staff, admin users done).
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).

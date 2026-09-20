@@ -32,6 +32,13 @@ const DEFAULT_PLATFORM_PREFIXES = [
   '/recycle-bin',
   '/products',
   '/staff',
+  // Admin-users sub-paths only. `/admin/feature-flags` and
+  // `/admin/activity-logs|login-attempts` remain legacy until those domains
+  // are migrated, so `/admin` as a whole is intentionally NOT routed.
+  '/admin/users',
+  '/admin/sub-admins',
+  '/admin/stats',
+  '/admin/impersonate',
 ] as const;
 
 // Per-release cutover control. `VITE_API_V1_DOMAINS` is a comma-separated

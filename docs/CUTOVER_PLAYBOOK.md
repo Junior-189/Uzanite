@@ -65,7 +65,8 @@ Read-only / low-blast-radius first; writes and money last.
 | 3 | `files`, `contacts`, `recycle-bin` | Writes, but scoped and easily reversible |
 | 4 | `products` | Writes inventory; `/products/bulk` stays legacy-only |
 | 5 | `staff` | Staff login + management; see the caveat in §6 |
-| 6 | `payments` | Money movement — last, after everything above is stable |
+| 6 | `admin/users`, `admin/sub-admins`, `admin/stats`, `admin/impersonate` | Admin panel user management. Only these sub-paths route; `/admin/feature-flags` and `/admin/activity-logs` stay legacy |
+| 7 | `payments` | Money movement — last, after everything above is stable |
 
 Widen **one step per release**, with a soak period, not several domains at once.
 
@@ -122,6 +123,11 @@ requests are still hitting `/api/v1/<domain>` in the proxy logs.
   `/auth/google`, `/auth/theme` (legacy-only).
 - **products** — `/products/bulk` (CSV import) is legacy-only and remains so even
   when `products` is enabled.
+- **admin** — the admin-panel **users** surface routes to the platform, but the
+  admin **feature-flags** and **activity-logs/login-attempts** pages remain
+  legacy (see `CUTOVER_COVERAGE.md`). Platform admin endpoints require TOTP MFA
+  on the admin account (`AdminMfaGuard`); enable it before cutting over or the
+  admin panel returns `mfa_setup_required`.
 - **staff** — staff login is now served by the platform
   (`POST /api/v1/staff/login`). Staff sessions are **access-token only** (no
   refresh), so staff re-authenticate when the access token expires. Keep an eye
