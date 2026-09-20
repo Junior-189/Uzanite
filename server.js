@@ -154,16 +154,6 @@ app.get('/admin/app-debug.apk', (req, res) => {
   }
 });
 
-// Serve desktop setup download before SPA catch-all
-app.get('/admin/UZANITE-Setup.exe', (req, res) => {
-  const exePath = path.join(__dirname, 'client', 'dist', 'UZANITE-Setup.exe');
-  if (fs.existsSync(exePath)) {
-    res.download(exePath, 'UZANITE-Setup.exe');
-  } else {
-    res.status(404).json({ success: false, error: 'Desktop setup not found. Build it with: npm run electron:build-installer' });
-  }
-});
-
 // React SPA catch-all: serve index.html for /admin/* routes
 app.get('/admin/*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));

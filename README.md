@@ -105,7 +105,6 @@ UZANITE is a **modular monolith (NestJS) with a separate worker process**, backe
 ├── docs/                      # Target-architecture alignment, Android signing
 ├── server.js, src/, tests/    # LEGACY (transitional): Express + MongoDB app, live system of record
 ├── scripts/                   # Legacy migrations/seeds + Mongo backup/restore
-├── electron/                  # Legacy desktop shell (planned to be dropped in favour of the PWA)
 ├── Dockerfile / docker-compose.yml / render.yaml
 └── .env.example               # Legacy env template (platform/ and client/ have their own)
 ```
