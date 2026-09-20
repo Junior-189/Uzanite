@@ -1,6 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { PLAN_CATALOGUE } from '@uzanite/contracts';
 import { JwtService } from '@nestjs/jwt';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { RedisService } from '../../src/redis/redis.service';
 import { TokenService } from '../../src/security/token.service';
@@ -46,7 +48,8 @@ process.env.JWT_REFRESH_TTL_DAYS = process.env.JWT_REFRESH_TTL_DAYS || '30';
 process.env.APP_URL = process.env.APP_URL || 'http://localhost:4000';
 process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-encryption-key-0123456789abcdef0123456789abcdef';
 process.env.STORAGE_SIGNING_SECRET = process.env.STORAGE_SIGNING_SECRET || 'test-storage-signing-secret-0123456789abcdef';
-process.env.STORAGE_LOCAL_DIR = process.env.STORAGE_LOCAL_DIR || 'private_uploads_test_platform';
+// Write test uploads to the OS temp dir, never inside the repository.
+process.env.STORAGE_LOCAL_DIR = process.env.STORAGE_LOCAL_DIR || join(tmpdir(), 'uzanite-test-storage');
 
 export interface Harness {
   prisma: PrismaService;

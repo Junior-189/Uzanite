@@ -6,3 +6,4 @@ coverage
 .turbo
 apps/api/generated
 private_uploads_platform
+private_uploads_test_platform
