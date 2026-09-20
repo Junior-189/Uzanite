@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { ProductsService } from '../../src/modules/catalog/products.service';
+import { LocalStorageService } from '../../src/storage/local-storage.service';
 import { StockService } from '../../src/modules/catalog/stock.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
 import { PrivacyService } from '../../src/modules/privacy/privacy.service';
@@ -41,7 +42,7 @@ d('M13 hardening (Postgres)', () => {
     h = await createHarness();
     const outbox = new OutboxService(h.prisma);
     stock = new StockService(h.prisma, outbox);
-    products = new ProductsService(h.prisma, stock);
+    products = new ProductsService(h.prisma, stock, new LocalStorageService(h.config));
     privacy = new PrivacyService(h.prisma);
     flags = new FeatureFlagsService(h.prisma, h.cache);
   });

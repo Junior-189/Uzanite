@@ -9,6 +9,7 @@ import {
 } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StockService } from './stock.service';
+import { LocalStorageService } from '../../storage/local-storage.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
 
@@ -16,7 +17,8 @@ import { newId } from '../../ids/id';
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly stock: StockService
+    private readonly stock: StockService,
+    private readonly storage: LocalStorageService
   ) {}
 
   private async getOrThrow(tenantId: string, id: string) {
@@ -25,15 +27,28 @@ export class ProductsService {
     return product;
   }
 
+  /**
+   * Legacy-compatible product envelope: the old client keys products by `_id`
+   * and renders `imagePath` with `imgUrl()`. Platform rows use `id` + `imageKey`,
+   * so alias them and hand back a freshly signed, expiring download URL.
+   */
+  private serialize<T extends { id: string; imageKey?: string | null }>(product: T) {
+    return {
+      ...product,
+      _id: product.id,
+      imagePath: product.imageKey ? this.storage.url(product.imageKey) : null,
+    };
+  }
+
   async get(tenantId: string, id: string) {
     const product = await this.getOrThrow(tenantId, id);
-    return { success: true, product };
+    return { success: true, product: this.serialize(product) };
   }
 
   async getByBarcode(tenantId: string, barcode: string) {
     const product = await this.prisma.db.product.findFirst({ where: { tenantId, barcode, deletedAt: null } });
     if (!product) throw new NotFoundException('Product not found for this barcode');
-    return { success: true, product };
+    return { success: true, product: this.serialize(product) };
   }
 
   /**
@@ -69,7 +84,12 @@ export class ProductsService {
       limit: query.limit,
       cursor: query.cursor ?? null,
     });
-    return { success: true, count: page.items.length, products: page.items, nextCursor: page.nextCursor };
+    return {
+      success: true,
+      count: page.items.length,
+      products: page.items.map((p) => this.serialize(p as { id: string; imageKey?: string | null })),
+      nextCursor: page.nextCursor,
+    };
   }
 
   async create(tenantId: string, input: CreateProductInput, recordedBy: string) {
@@ -212,7 +232,11 @@ export class ProductsService {
       dedupeKey: input.clientRef ? `product:${id}:adjust:${input.clientRef}` : undefined,
       recordedBy,
     });
-    return { success: true, applied: result.applied, product: result.product };
+    return {
+      success: true,
+      applied: result.applied,
+      product: this.serialize(result.product as { id: string; imageKey?: string | null }),
+    };
   }
 
   async movements(tenantId: string, productId: string, limit = 50, cursor?: string) {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { ProductsService } from '../../src/modules/catalog/products.service';
+import { LocalStorageService } from '../../src/storage/local-storage.service';
 import { StockService } from '../../src/modules/catalog/stock.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
 import { runWithRequest } from '../../src/context/tenant-context';
@@ -27,7 +28,7 @@ d('catalog integration (Postgres)', () => {
     h = await createHarness();
     outbox = new OutboxService(h.prisma);
     stock = new StockService(h.prisma, outbox);
-    products = new ProductsService(h.prisma, stock);
+    products = new ProductsService(h.prisma, stock, new LocalStorageService(h.config));
   });
   afterAll(async () => {
     if (h) await h.prisma.onModuleDestroy();
@@ -49,6 +50,19 @@ d('catalog integration (Postgres)', () => {
     expect(moves.movements).toHaveLength(1);
     expect(moves.movements[0].quantity).toBe(10);
     expect(moves.movements[0].balanceAfter).toBe(10);
+  });
+
+  it('serializes legacy-compatible product fields (_id + signed imagePath)', async () => {
+    const t = await seedTenant(h, 'cat-img');
+    const created = await withTenant(t, () =>
+      products.create(t, { name: 'Tea', price: 500, imageKey: 'k1.png' } as never, 'Owner')
+    );
+    expect(created.product._id).toBe(created.product.id);
+    expect(created.product.imagePath).toContain('/api/v1/files/');
+
+    const got = await withTenant(t, () => products.get(t, created.product.id));
+    expect(got.product._id).toBe(created.product.id);
+    expect(got.product.imagePath).toContain('sig=');
   });
 
   it('restocks and adjusts, and refuses to go negative', async () => {

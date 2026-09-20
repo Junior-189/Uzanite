@@ -1,8 +1,7 @@
 import db from './index';
 import { enqueue } from './sync';
 import { getAccessToken } from '../utils/tokenStore';
-
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+import { resolveApiUrl } from '../utils/apiRouting';
 
 async function getAuthHeaders() {
   // Single source of truth for credentials (see utils/tokenStore.js). Reading
@@ -26,7 +25,7 @@ export async function fetchFromCacheOrApi(entity, options = {}) {
   try {
     const headers = await getAuthHeaders();
     const params = options.params ? '?' + new URLSearchParams(options.params).toString() : '';
-    const res = await fetch(`${API_URL}/${entity}${params}`, { headers });
+    const res = await fetch(resolveApiUrl(`/${entity}${params}`), { headers });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     const json = await res.json();
     const items = json[entity] || json.data || [];
@@ -42,7 +41,7 @@ async function fetchAndCache(entity, options = {}) {
   try {
     const headers = await getAuthHeaders();
     const params = options.params ? '?' + new URLSearchParams(options.params).toString() : '';
-    const res = await fetch(`${API_URL}/${entity}${params}`, { headers });
+    const res = await fetch(resolveApiUrl(`/${entity}${params}`), { headers });
     if (!res.ok) return;
     const json = await res.json();
     const items = json[entity] || json.data || [];
@@ -65,7 +64,7 @@ export async function createOffline(entity, data) {
   if (navigator.onLine) {
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${API_URL}/${entity}`, {
+      const res = await fetch(resolveApiUrl(`/${entity}`), {
         method: 'POST',
         headers,
         body: JSON.stringify({ ...data, clientRef: id }),
@@ -103,7 +102,7 @@ export async function updateOffline(entity, id, data) {
   if (navigator.onLine) {
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${API_URL}/${entity}/${id}`, {
+      const res = await fetch(resolveApiUrl(`/${entity}/${id}`), {
         method: 'PUT',
         headers,
         body: JSON.stringify(data),
@@ -127,7 +126,7 @@ export async function deleteOffline(entity, id) {
   if (navigator.onLine) {
     try {
       const headers = await getAuthHeaders();
-      await fetch(`${API_URL}/${entity}/${id}`, { method: 'DELETE', headers });
+      await fetch(resolveApiUrl(`/${entity}/${id}`), { method: 'DELETE', headers });
       return;
     } catch { /* will sync later */ }
   }
@@ -139,7 +138,7 @@ export async function apiAction(path, method = 'POST', body = null) {
   const headers = await getAuthHeaders();
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(`${API_URL}${path}`, opts);
+  const res = await fetch(resolveApiUrl(path), opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `API error: ${res.status}`);

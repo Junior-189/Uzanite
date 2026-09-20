@@ -4,6 +4,7 @@ import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { RecycleBinService } from '../../src/modules/recycle-bin/recycle-bin.service';
 import { OrdersService } from '../../src/modules/commerce/orders.service';
 import { ProductsService } from '../../src/modules/catalog/products.service';
+import { LocalStorageService } from '../../src/storage/local-storage.service';
 import { StockService } from '../../src/modules/catalog/stock.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
@@ -25,7 +26,7 @@ d('recycle bin (Postgres)', () => {
     const billing = new BillingService(h.prisma, h.uow, h.cache, h.config);
     const ledger = new LedgerService(h.prisma);
     const orders = new OrdersService(h.prisma, stock, outbox, billing, ledger);
-    const products = new ProductsService(h.prisma, stock);
+    const products = new ProductsService(h.prisma, stock, new LocalStorageService(h.config));
     const notifications = new NotificationsService(h.prisma);
     const contacts = new ContactsService(h.prisma, outbox, h.config);
     recycle = new RecycleBinService(h.prisma, orders, products, notifications, contacts);

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { ProductsService } from '../../src/modules/catalog/products.service';
+import { LocalStorageService } from '../../src/storage/local-storage.service';
 import { StockService } from '../../src/modules/catalog/stock.service';
 import { OrdersService } from '../../src/modules/commerce/orders.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
@@ -37,7 +38,7 @@ d('finance integration (Postgres)', () => {
     const uow = new UnitOfWorkService(h.prisma);
     const billing = h.billing;
     ledger = new LedgerService(h.prisma);
-    products = new ProductsService(h.prisma, stock);
+    products = new ProductsService(h.prisma, stock, new LocalStorageService(h.config));
     orders = new OrdersService(h.prisma, stock, outbox, billing, ledger);
     payments = new PaymentsService(h.prisma, orders, ledger, outbox, new PaymentAdaptersService());
   });

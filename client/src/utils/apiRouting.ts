@@ -30,6 +30,7 @@ export const PLATFORM_PREFIXES = [
   '/files',
   '/contacts',
   '/recycle-bin',
+  '/products',
 ] as const;
 
 // Flows the platform does not implement yet — always legacy, even when the

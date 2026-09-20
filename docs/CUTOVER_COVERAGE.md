@@ -24,18 +24,18 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | File uploads | — | `POST /api/v1/files` (+ signed `GET /files/:key`) | **READY** | platform module built (`files`); client upload call sites wired during products/payments cutover |
 | Orders (list/get/status actions) | `/api/orders`, `/orders/:id/*` | `/api/v1/orders`, `/orders/:id/*` | **BLOCKED** | receipt endpoints (`/orders/:id/receipt`, `/send-receipt`) still legacy-only; confirm-payment now has an upload path |
 | Payments (initiate/manual) | `/api/payments/orders/:id/{initiate,manual}` | `/api/v1/payments/orders/:id/{initiate,manual}` | **PARTIAL** | platform now accepts `proofPath` (upload via `/api/v1/files`); client must upload first and send the key |
-| Products (CRUD/restock) | `/api/products`, `/products/:id/restock` | `/api/v1/products`, `/products/:id/restock` | **PARTIAL** | platform now supports image uploads via `/api/v1/files`; legacy `/products/bulk` (CSV import) remains platform-missing |
+| Products (CRUD/restock) | `/api/products`, `/products/:id/restock` | `/api/v1/products`, `/products/:id/restock` | **READY** | routed (`/products`); responses alias `_id` + signed `imagePath`; client uploads image via `/api/v1/files`; legacy `/products/bulk` (CSV import) stays legacy-only |
 | Categories | (via products) | `/api/v1/categories` | **READY** | client does not call it directly |
 | Receipts | `/api/orders/:id/receipt` | `/api/v1/receipts/order/:orderId` | **BLOCKED** | different path + response envelope |
 | Messaging / WhatsApp | `/api/whatsapp/{status,qr,connect,disconnect,meta/credentials}` | `/api/v1/whatsapp/{account,templates,messages,conversations}` | **BLOCKED** | legacy QR/Baileys connect flow has no platform equivalent; per-tenant credentials shape differs |
-| Contacts | `/api/contacts*` | (WhatsApp contacts only) | **BLOCKED** | dedicated contacts CRUD not implemented on the platform |
+| Contacts | `/api/contacts*` | `/api/v1/contacts` | **READY** | routed; platform module built + tested (CRUD, soft delete/restore, chat history, outbox email) |
 | Chat | `/api/chat/*` | — | **BLOCKED** | not implemented |
 | Staff | `/api/staff*`, `/staff/me` | — | **BLOCKED** | staff management not implemented (memberships API exists but paths/shape differ) |
 | Admin (tenants) | `/api/admin/users*` | `/api/v1/admin/tenants*` | **BLOCKED** | different path + shape; platform has no user/sub-admin CRUD |
 | Admin (stats/flags/login-attempts) | `/api/admin/{stats,feature-flags,login-attempts}*` | — | **BLOCKED** | not implemented |
 | Dashboard | `/api/dashboard/*` | — | **BLOCKED** | not implemented |
 | Reports | `/api/reports/*` | — | **BLOCKED** | not implemented |
-| Recycle bin | `/api/recycle-bin`, `/restore/:type/:id`, `/:type/:id` | `/api/v1/recycle-bin` (same sub-paths, types: orders/products/notifications) | **READY** | platform module built + tested; **not routed** because the client's `contacts` tab has no platform implementation (routing would silently hide deleted contacts) |
+| Recycle bin | `/api/recycle-bin`, `/restore/:type/:id`, `/:type/:id` | `/api/v1/recycle-bin` (same sub-paths, types: orders/products/contacts/notifications) | **READY** | routed; platform module covers all four client tabs |
 | Broadcast / email | `/api/broadcast/*` | — | **BLOCKED** | not implemented |
 | Privacy | `/api/privacy/{export,erase}` | `/api/v1/privacy/{requests,consent,erase}` | **BLOCKED** | export path/shape differ |
 
@@ -45,7 +45,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 2. **Batch D is gated on that build.** Baileys can only be deleted once the platform (or a still-present legacy worker) owns WhatsApp; Mongo/Express can only be deleted once every domain above is cut over and reconciled.
 3. **Uploads are now resolved.** ✅ Platform `POST /api/v1/files` (private, content-sniffed, HMAC-signed downloads) unblocks product images and payment proofs. Wiring the client upload call sites is the remaining client work.
 4. **Dashboard is now resolved.** ✅ Platform `GET /api/v1/dashboard/stats` mirrors the legacy shape and is routed.
-5. **Safe next cutovers** once parity passes: billing (already same paths), then products (with upload; bulk CSV still missing), then payments (with proof upload), then orders (without receipt).
+5. **Cutovers landed so far**: auth, tenants, billing, notifications, dashboard, payments (proof upload), files, contacts, recycle-bin, products (bulk CSV stays legacy-only).
 
 ## Progress log
 
@@ -54,7 +54,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Electron | ✅ removed |
 | Platform file uploads (`/api/v1/files`) | ✅ built + tested (migration 0017, `stored_files` RLS) |
 | Platform dashboard (`/api/v1/dashboard/stats`) | ✅ built + tested + routed |
-| Platform recycle bin (`/api/v1/recycle-bin`) | ✅ built + tested (orders/products/notifications) — READY, not routed (contacts tab) |
+| Platform recycle bin (`/api/v1/recycle-bin`) | ✅ built + tested (orders/products/contacts/notifications) — routed |
 | Payment-proof uploads wired (client) | ✅ `/api/v1/files` upload → `proofPath` |
 | Notifications cutover | ✅ routed |
 | Auth / tenancy / billing | ✅ routed / ready |
@@ -64,6 +64,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites); build **reports, recycle-bin, admin users, staff, contacts, chat, broadcast**.
+3. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites); build **reports, admin users, staff, chat, broadcast** (contacts + recycle-bin done).
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).

@@ -15,6 +15,8 @@ import JsBarcode from 'jsbarcode';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import { getAccessToken } from '../utils/tokenStore';
 import { rowActivate } from '../utils/rowActivate';
+import { isRoutedToPlatform } from '../utils/apiRouting';
+import { uploadFile } from '../utils/files';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -80,10 +82,34 @@ export default function Products() {
       if (imageFile) fd.append('image', imageFile);
       fd.append('clientRef', crypto.randomUUID());
 
-      if (navigator.onLine) {
+      const productId = editProduct?._id || editProduct?.id;
+      if (navigator.onLine && isRoutedToPlatform('/products')) {
+        const payload = {
+          name: form.name,
+          description: form.description,
+          price: Number(form.price),
+          currency: form.currency,
+          stock: Number(form.stock || 0),
+          cost: Number(form.cost || 0),
+          minPrice: Number(form.minPrice || 0),
+          barcode: form.barcode || null,
+          expiryDate: form.expiryDate || null,
+          expiryWarnDays: Number(form.expiryWarnDays || 7),
+          clientRef: crypto.randomUUID(),
+        };
+        if (imageFile) {
+          const uploaded = await uploadFile(imageFile, 'product_image');
+          payload.imageKey = uploaded.key;
+        }
+        const json = editProduct
+          ? await api.put(`/products/${productId}`, payload)
+          : await api.post('/products', payload);
+        if (!json.success) throw new Error(json.error || t('products.failed_save'));
+        showToast(editProduct ? t('products.confirmed_updated') : t('products.confirmed_created'), 'success');
+      } else if (navigator.onLine) {
         const token = getAccessToken();
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const url = editProduct ? `${API_URL}/products/${editProduct._id || editProduct.id}` : `${API_URL}/products`;
+        const url = productId ? `${API_URL}/products/${productId}` : `${API_URL}/products`;
         const res = await fetch(url, { method: editProduct ? 'PUT' : 'POST', headers, body: fd });
         const json = await res.json();
         if (!json.success) throw new Error(json.error || t('products.failed_save'));

@@ -43,6 +43,7 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/files')).toBe(true);
     expect(m.isRoutedToPlatform('/contacts')).toBe(true);
     expect(m.isRoutedToPlatform('/recycle-bin')).toBe(true);
+    expect(m.isRoutedToPlatform('/products')).toBe(true);
   });
 
   it('keeps legacy-only sub-paths on legacy even when the prefix is routed', async () => {
@@ -55,7 +56,6 @@ describe('apiRouting (Strangler cutover)', () => {
     const m = await loadWithFlag('true');
     expect(m.isRoutedToPlatform('/orders')).toBe(false);
     expect(m.isRoutedToPlatform('/admin/users')).toBe(false);
-    expect(m.isRoutedToPlatform('/products')).toBe(false);
     expect(m.isRoutedToPlatform('/staff')).toBe(false);
     expect(m.isRoutedToPlatform('/broadcast/send')).toBe(false);
     expect(m.isRoutedToPlatform('/chat/send')).toBe(false);

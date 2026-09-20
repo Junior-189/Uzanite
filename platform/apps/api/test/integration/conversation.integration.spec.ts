@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { MetaClient } from '@uzanite/messaging';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { ProductsService } from '../../src/modules/catalog/products.service';
+import { LocalStorageService } from '../../src/storage/local-storage.service';
 import { StockService } from '../../src/modules/catalog/stock.service';
 import { OrdersService } from '../../src/modules/commerce/orders.service';
 import { BillingService } from '../../src/modules/billing/billing.service';
@@ -32,7 +33,7 @@ d('conversation flows (Postgres)', () => {
     const uow = new UnitOfWorkService(h.prisma);
     const billing = h.billing;
     const ledger = new LedgerService(h.prisma);
-    products = new ProductsService(h.prisma, stock);
+    products = new ProductsService(h.prisma, stock, new LocalStorageService(h.config));
     orders = new OrdersService(h.prisma, stock, outbox, billing, ledger);
     const adapters = new PaymentAdaptersService();
     const payments = new PaymentsService(h.prisma, orders, ledger, outbox, adapters);
