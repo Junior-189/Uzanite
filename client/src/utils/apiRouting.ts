@@ -18,7 +18,9 @@ export const PLATFORM_BASE: string = (import.meta.env.VITE_PLATFORM_API_URL as s
 // `/admin/stats`, feature flags, … all remain legacy), so routing them now would
 // misroute live requests. Widen this list as each domain's call sites are
 // reconciled and proven with the parity harness.
-export const PLATFORM_PREFIXES = ['/auth', '/tenants', '/billing'] as const;
+// Domains the platform fully covers AND whose client contract matches. Added
+// incrementally as each is proven with the parity harness.
+export const PLATFORM_PREFIXES = ['/auth', '/tenants', '/billing', '/notifications'] as const;
 
 // Flows the platform does not implement yet — always legacy, even for `/auth/*`.
 export const LEGACY_ONLY_PREFIXES = ['/auth/google', '/auth/staff', '/auth/theme', '/staff'] as const;

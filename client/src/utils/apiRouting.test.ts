@@ -33,10 +33,20 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.apiBaseFor('/auth/google')).toBe('/api');
   });
 
-  it('does not route non-wave domains even when enabled', async () => {
+  it('routes fully-covered domains when enabled', async () => {
+    const m = await loadWithFlag('true');
+    expect(m.isRoutedToPlatform('/notifications')).toBe(true);
+    expect(m.isRoutedToPlatform('/tenants/me')).toBe(true);
+    expect(m.isRoutedToPlatform('/billing/plans')).toBe(true);
+  });
+
+  it('does not route domains the platform does not implement yet', async () => {
     const m = await loadWithFlag('true');
     expect(m.isRoutedToPlatform('/orders')).toBe(false);
     expect(m.isRoutedToPlatform('/admin/users')).toBe(false);
     expect(m.isRoutedToPlatform('/products')).toBe(false);
+    expect(m.isRoutedToPlatform('/staff')).toBe(false);
+    expect(m.isRoutedToPlatform('/broadcast/send')).toBe(false);
+    expect(m.isRoutedToPlatform('/chat/send')).toBe(false);
   });
 });

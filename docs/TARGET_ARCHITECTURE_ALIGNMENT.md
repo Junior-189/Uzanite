@@ -68,6 +68,8 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 3. **Remove the Express/Mongo app — ⛔ BLOCKED.** The client still calls legacy `/api` for every domain except auth/tenants (orders, products, payments, reports, staff, whatsapp, notifications, …). Deleting Mongo/Express now would break the running product. This is gated on **finishing Batch E** (cut over the remaining domains + reconciliation green).
 
 > Deletion order is therefore: **Electron (done) → finish cutover → Baileys → Mongo/Express.** Do not invert it.
+>
+> **See [CUTOVER_COVERAGE.md](CUTOVER_COVERAGE.md)** for the per-domain matrix: ~14 domains the client uses have **no platform implementation**, so the cutover can only "finish" by **building** those platform modules (dashboard, reports, recycle-bin, admin users, staff, contacts, chat, broadcast, WhatsApp account lifecycle, file uploads) — not by deleting the legacy app. File uploads are the next cross-cutting platform build (they unblock products/images and payments/proof).
 
 ### Batch E — Cutover to the target backend (the real project) — 🔄 first increment DONE (auth wave), verified locally (not pushed)
 1. **Dual-stack client routing + auth wave:** `client/src/utils/apiRouting.ts` routes a path to `/api/v1` or `/api` based on the `VITE_API_V1` flag (**default off**). The axios client applies it per request; auth call sites use `resolveApiUrl`. Live auth flows the platform does not implement (`/auth/google`, `/auth/staff`, `/auth/theme`) are pinned to legacy.
@@ -95,4 +97,4 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 - **Batch B (auth hardening):** ✅ done, verified locally (argon2id, admin TOTP 2FA, JWT `kid` rotation). **Not pushed** per operator instruction.
 - **Batch C (client TypeScript foundation + TanStack Query/Zod + PWA + Android package-id repair):** ✅ foundation done, verified locally. Remaining: page-by-page TSX conversion, TanStack Query adoption per page, React Hook Form for forms, component library (shadcn/ui).
 - **Batch D (delete Electron/Baileys/Mongo):** 🔄 Electron **removed**; Baileys + Mongo/Express **blocked** until the remaining Batch E cutover is complete (client still uses legacy `/api` for most domains).
-- **Batch E (client cutover to `/api/v1`):** 🔄 first increment done — auth-wave routing flag (`VITE_API_V1`, default off) + platform→legacy user/permission bridge + parity harness; verified locally, not pushed. Remaining: cut over tenants/billing/admin and then commerce/catalog/finance/messaging. Prerequisite for Batch D.
+- **Batch E (client cutover to `/api/v1`):** 🔄 auth + tenants + billing + notifications routed (flag default off) via adapters and a parity harness; verified locally, not pushed. Remaining domains are **blocked on missing platform endpoints** — see [CUTOVER_COVERAGE.md](CUTOVER_COVERAGE.md). Prerequisite for Batch D.
