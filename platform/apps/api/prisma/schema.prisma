@@ -277,6 +277,7 @@ model User {
   status             UserStatus    @default(active)
   tokenVersion       Int           @default(0) @map("token_version")
   mustChangePassword Boolean       @default(false) @map("must_change_password")
+  theme              String        @default("light")
   emailVerifiedAt    DateTime?     @map("email_verified_at")
   // TOTP two-factor auth (Phase M14). The secret is AES-256-GCM encrypted;
   // recovery codes are stored as SHA-256 hashes and consumed on use.

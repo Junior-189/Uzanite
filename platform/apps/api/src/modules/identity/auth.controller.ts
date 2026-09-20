@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Put, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import {
@@ -10,10 +10,12 @@ import {
   refreshSchema,
   registerSchema,
   resetPasswordSchema,
+  themeSchema,
   totpCodeSchema,
   totpDisableSchema,
 } from '@uzanite/contracts';
 import { Public } from '../../decorators/public.decorator';
+import { RequireTenant } from '../../decorators/require-tenant.decorator';
 import { CurrentUser } from '../../decorators/principal.decorator';
 import { ZodValidationPipe } from '../../pipes/zod-validation.pipe';
 import { Principal } from '../../context/tenant-context';
@@ -92,6 +94,15 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() principal: Principal) {
     return this.auth.me(principal.userId);
+  }
+
+  @RequireTenant()
+  @Put('theme')
+  setTheme(
+    @CurrentUser() principal: Principal,
+    @Body(new ZodValidationPipe(themeSchema)) body: { theme: 'light' | 'dark' }
+  ) {
+    return this.auth.setTheme(principal.userId, body.theme);
   }
 
   // ── TOTP two-factor management (authenticated) ───────────────────────────────

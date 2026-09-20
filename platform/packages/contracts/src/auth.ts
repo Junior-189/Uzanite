@@ -49,3 +49,7 @@ export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type LoginMfaInput = z.infer<typeof loginMfaSchema>;
 export type TotpCodeInput = z.infer<typeof totpCodeSchema>;
 export type TotpDisableInput = z.infer<typeof totpDisableSchema>;
+
+// Legacy `/auth/theme` — tenant UI theme preference.
+export const themeSchema = z.object({ theme: z.enum(['light', 'dark']) }).strict();
+export type ThemeInput = z.infer<typeof themeSchema>;

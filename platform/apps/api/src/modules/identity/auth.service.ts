@@ -323,6 +323,7 @@ export class AuthService {
         platformRole: true,
         status: true,
         mustChangePassword: true,
+        theme: true,
         createdAt: true,
         totpEnabledAt: true,
       },
@@ -347,6 +348,12 @@ export class AuthService {
         tenant: membership?.tenant ?? null,
       },
     };
+  }
+
+  /** Persists the tenant user's UI theme preference (legacy `/auth/theme`). */
+  async setTheme(userId: string, theme: 'light' | 'dark') {
+    await this.prisma.db.user.update({ where: { id: userId }, data: { theme } });
+    return { success: true, theme };
   }
 
   async forgotPassword(email: string) {

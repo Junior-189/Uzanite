@@ -44,6 +44,9 @@ const DEFAULT_PLATFORM_PREFIXES = [
   '/admin/sub-admins',
   '/admin/stats',
   '/admin/impersonate',
+  '/admin/feature-flags',
+  '/admin/activity-logs',
+  '/admin/login-attempts',
 ] as const;
 
 // Per-release cutover control. `VITE_API_V1_DOMAINS` is a comma-separated
@@ -65,7 +68,6 @@ export const PLATFORM_PREFIXES: readonly string[] =
 export const LEGACY_ONLY_PREFIXES = [
   '/auth/google',
   '/auth/staff',
-  '/auth/theme',
   '/products/bulk',
 ] as const;
 

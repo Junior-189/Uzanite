@@ -1,5 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ListFeatureFlagsQuery, UpsertFeatureFlagInput } from '@uzanite/contracts';
+import {
+  FEATURE_FLAGS,
+  FEATURE_KEYS,
+  FeatureFlagsUpdateInput,
+  ListFeatureFlagsQuery,
+  UpsertFeatureFlagInput,
+} from '@uzanite/contracts';
 import { CacheService } from '../../cache/cache.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { runAsSystem } from '../../context/tenant-context';
@@ -49,6 +55,99 @@ export class FeatureFlagsService {
           return resolved;
         })
     );
+  }
+
+  // ── Legacy keyed-shape administration (admin panel) ────────────────────────
+
+  private defaults(): Record<string, { enabled: boolean; message: string }> {
+    return Object.fromEntries(FEATURE_KEYS.map((key) => [key, { enabled: true, message: '' }]));
+  }
+
+  private async rowsFor(scope: 'global' | 'tenant', tenantId?: string | null) {
+    return runAsSystem(() =>
+      this.prisma.db.featureFlag.findMany({
+        where: { scope, tenantId: scope === 'tenant' ? tenantId ?? null : null },
+      })
+    );
+  }
+
+  /** Global flags with defaults; every known key is present. */
+  async globalMap(): Promise<Record<string, { enabled: boolean; message: string }>> {
+    const rows = await this.rowsFor('global');
+    const map = this.defaults();
+    for (const row of rows) if (FEATURE_KEYS.includes(row.key)) map[row.key] = { enabled: row.enabled, message: row.message };
+    return map;
+  }
+
+  /** Effective flags for a tenant (global overlaid by tenant overrides). */
+  async effectiveWithMessages(tenantId: string | null): Promise<Record<string, { enabled: boolean; message: string }>> {
+    const map = await this.globalMap();
+    if (tenantId) {
+      const rows = await this.rowsFor('tenant', tenantId);
+      for (const row of rows) if (FEATURE_KEYS.includes(row.key)) map[row.key] = { enabled: row.enabled, message: row.message };
+    }
+    return map;
+  }
+
+  private async tenantOverrideKeys(tenantId: string): Promise<Set<string>> {
+    const rows = await this.rowsFor('tenant', tenantId);
+    return new Set(rows.map((r) => r.key));
+  }
+
+  private async applyFlags(scope: 'global' | 'tenant', tenantId: string | null, flags: FeatureFlagsUpdateInput['flags']) {
+    const known = Object.entries(flags).filter(([key]) => FEATURE_KEYS.includes(key));
+    await runAsSystem(async () => {
+      for (const [key, entry] of known) {
+        const existing = await this.prisma.db.featureFlag.findFirst({
+          where: { scope, tenantId: scope === 'tenant' ? tenantId : null, key },
+        });
+        const data = { enabled: entry.enabled !== false, message: entry.message ?? '' };
+        if (existing) {
+          await this.prisma.db.featureFlag.update({ where: { id: existing.id }, data });
+        } else {
+          await this.prisma.db.featureFlag.create({
+            data: { id: newId(), scope, tenantId: scope === 'tenant' ? tenantId : null, key, ...data },
+          });
+        }
+      }
+    });
+    await this.invalidate(scope === 'tenant' ? tenantId : null);
+  }
+
+  async listForAdmin(tenantId?: string) {
+    if (!tenantId) {
+      return { success: true, features: FEATURE_FLAGS, global: await this.globalMap() };
+    }
+    const overridden = await this.tenantOverrideKeys(tenantId);
+    const effective = await this.effectiveWithMessages(tenantId);
+    const global = Object.fromEntries(
+      Object.entries(effective).map(([key, value]) => [key, { ...value, overridden: overridden.has(key) }])
+    );
+    return { success: true, features: FEATURE_FLAGS, global };
+  }
+
+  async updateGlobal(input: FeatureFlagsUpdateInput) {
+    await this.applyFlags('global', null, input.flags);
+    return { success: true, message: 'Feature flags updated', global: await this.globalMap() };
+  }
+
+  async updateTenant(tenantId: string, input: FeatureFlagsUpdateInput) {
+    const tenant = await runAsSystem(() => this.prisma.db.tenant.findFirst({ where: { id: tenantId, deletedAt: null } }));
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    await this.applyFlags('tenant', tenantId, input.flags);
+    const rows = await this.rowsFor('tenant', tenantId);
+    const overrides = Object.fromEntries(rows.map((r) => [r.key, { enabled: r.enabled, message: r.message }]));
+    return { success: true, message: 'Tenant feature flags updated', overrides };
+  }
+
+  async resetTenant(tenantId: string) {
+    const tenant = await runAsSystem(() => this.prisma.db.tenant.findFirst({ where: { id: tenantId, deletedAt: null } }));
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    await runAsSystem(() =>
+      this.prisma.db.featureFlag.deleteMany({ where: { scope: 'tenant', tenantId } })
+    );
+    await this.invalidate(tenantId);
+    return { success: true, message: 'Tenant feature flags reset to global defaults' };
   }
 
   async list(query: ListFeatureFlagsQuery) {
