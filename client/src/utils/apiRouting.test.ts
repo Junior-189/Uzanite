@@ -11,6 +11,13 @@ async function loadWithFlag(value: string) {
   return import('./apiRouting');
 }
 
+async function loadWith(value: string, domains?: string) {
+  vi.stubEnv('VITE_API_V1', value);
+  vi.stubEnv('VITE_API_V1_DOMAINS', domains ?? '');
+  vi.resetModules();
+  return import('./apiRouting');
+}
+
 describe('apiRouting (Strangler cutover)', () => {
   it('routes auth to /api/v1 when VITE_API_V1=true', async () => {
     const m = await loadWithFlag('true');
@@ -46,6 +53,27 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/products')).toBe(true);
     expect(m.isRoutedToPlatform('/staff')).toBe(true);
     expect(m.isRoutedToPlatform('/staff/login')).toBe(true);
+  });
+
+  it('restricts routing to VITE_API_V1_DOMAINS when set (per-domain rollout)', async () => {
+    const m = await loadWith('true', 'auth,billing');
+    expect(m.isRoutedToPlatform('/auth/login')).toBe(true);
+    expect(m.isRoutedToPlatform('/billing/plans')).toBe(true);
+    expect(m.isRoutedToPlatform('/products')).toBe(false);
+    expect(m.isRoutedToPlatform('/staff')).toBe(false);
+  });
+
+  it('accepts bare or rooted domain names in VITE_API_V1_DOMAINS', async () => {
+    const m = await loadWith('true', '/staff,/products');
+    expect(m.isRoutedToPlatform('/staff')).toBe(true);
+    expect(m.isRoutedToPlatform('/products')).toBe(true);
+    expect(m.isRoutedToPlatform('/auth/login')).toBe(false);
+  });
+
+  it('ignores the domain override when the cutover flag is off', async () => {
+    const m = await loadWith('false', 'auth,billing');
+    expect(m.isRoutedToPlatform('/auth/login')).toBe(false);
+    expect(m.apiBaseFor('/billing/plans')).toBe('/api');
   });
 
   it('keeps legacy-only sub-paths on legacy even when the prefix is routed', async () => {

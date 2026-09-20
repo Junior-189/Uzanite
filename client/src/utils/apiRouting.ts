@@ -20,7 +20,7 @@ export const PLATFORM_BASE: string = (import.meta.env.VITE_PLATFORM_API_URL as s
 // reconciled and proven with the parity harness.
 // Domains the platform fully covers AND whose client contract matches. Added
 // incrementally as each is proven with the parity harness.
-export const PLATFORM_PREFIXES = [
+const DEFAULT_PLATFORM_PREFIXES = [
   '/auth',
   '/tenants',
   '/billing',
@@ -33,6 +33,20 @@ export const PLATFORM_PREFIXES = [
   '/products',
   '/staff',
 ] as const;
+
+// Per-release cutover control. `VITE_API_V1_DOMAINS` is a comma-separated
+// subset (bare `auth` or rooted `/auth`); when set, ONLY those domains route to
+// the platform. This lets an operator widen or roll back the migration one
+// domain at a time without a code change — see docs/CUTOVER_PLAYBOOK.md.
+// Unset/empty falls back to the full set above.
+const OVERRIDE_DOMAINS: readonly string[] = ((import.meta.env.VITE_API_V1_DOMAINS as string) || '')
+  .split(',')
+  .map((d) => d.trim())
+  .filter(Boolean)
+  .map((d) => (d.startsWith('/') ? d : `/${d}`));
+
+export const PLATFORM_PREFIXES: readonly string[] =
+  OVERRIDE_DOMAINS.length > 0 ? OVERRIDE_DOMAINS : DEFAULT_PLATFORM_PREFIXES;
 
 // Flows the platform does not implement yet — always legacy, even when the
 // domain prefix is otherwise routed (e.g. product bulk-CSV import).
