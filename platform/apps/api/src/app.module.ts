@@ -52,6 +52,7 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { LedgersModule } from './modules/ledgers/ledgers.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { BroadcastModule } from './modules/broadcast/broadcast.module';
 
 @Module({
   imports: [
@@ -139,6 +140,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     StaffModule,
     LedgersModule,
     ReportsModule,
+    BroadcastModule,
     HealthModule,
   ],
   providers: [

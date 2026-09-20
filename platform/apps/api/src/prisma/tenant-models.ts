@@ -45,6 +45,8 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'Expense',
   'Purchase',
   'Debt',
+  // Broadcast (Phase M20)
+  'BroadcastLog',
 ]);
 
 // Models with an optional tenantId (global + per-tenant rows) are scoped

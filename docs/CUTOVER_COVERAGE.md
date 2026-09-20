@@ -39,7 +39,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Admin (feature-flags) | `/api/admin/feature-flags*` | `/api/v1/admin/feature-flags*` (legacy keyed shape) | **READY** | routed; global + per-tenant overrides, `{features,global}`/`{flags}` shapes, `/me` for tenants |
 | Admin (activity-logs/login-attempts) | `/api/admin/{activity-logs,login-attempts}*` | `/api/v1/admin/...` (same) | **READY** | routed; list (page/page + filters) + summary for both, joined to user name/email |
 | Recycle bin | `/api/recycle-bin`, `/restore/:type/:id`, `/:type/:id` | `/api/v1/recycle-bin` (same sub-paths, types: orders/products/contacts/notifications) | **READY** | routed; platform module covers all four client tabs |
-| Broadcast / email | `/api/broadcast/*` | — | **BLOCKED** | not implemented |
+| Broadcast / email | `/api/broadcast/*` | `/api/v1/broadcast/*` (same) | **READY** | routed; send (whatsapp/email/both) fans out to opted-in contacts via the messaging outbox, contacts list/count/add/import, `/sent` log; gated by `broadcast` feature + `broadcastsPerMonth` |
 | Privacy | `/api/privacy/{export,erase}` | `/api/v1/privacy/{requests,consent,erase}` | **BLOCKED** | export path/shape differ |
 
 ## What this means
@@ -67,6 +67,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. Platform: build the **WhatsApp tier — chat, broadcast, WhatsApp account lifecycle** (everything else is migrated: contacts, recycle-bin, products, orders+receipts, staff, admin users, expenses/purchases/debts, reports, admin flags/logs, theme, Google login).
+3. Platform: build **chat + WhatsApp account lifecycle** (broadcast done; everything else migrated). Account lifecycle adapters must drop the Baileys QR flow in favour of Meta credentials.
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).

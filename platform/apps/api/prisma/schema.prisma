@@ -227,6 +227,7 @@ model Tenant {
   conversations      Conversation[]
   flowTraces         FlowTrace[]
   staff              Staff[]
+  broadcastLogs      BroadcastLog[]
   expenses           Expense[]
   purchases          Purchase[]
   debts              Debt[]
@@ -1224,4 +1225,23 @@ model Debt {
   @@index([tenantId, deletedAt])
   @@index([tenantId, createdAt])
   @@map("debts")
+}
+
+// ── Broadcast (Phase M20) ─────────────────────────────────────────────────────
+// One row per broadcast fan-out; backs the legacy `/broadcast/sent` view.
+model BroadcastLog {
+  id         String   @id @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  subject    String   @default("")
+  body       String   @default("")
+  recipients String[] @default([])
+  count      Int      @default(0)
+  channel    String   @default("email")
+  sentAt     DateTime @default(now()) @map("sent_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sentAt])
+  @@map("broadcast_logs")
 }
