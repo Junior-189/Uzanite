@@ -53,6 +53,14 @@ export class FilesController {
     return this.files.upload(tenantId, file as UploadedFileLike, body?.purpose ?? 'other', principal?.userId ?? '');
   }
 
+  /** Mint a fresh signed URL for one of the tenant's own files. */
+  @ApiBearerAuth()
+  @RequireTenant()
+  @Get(':key/url')
+  signedUrl(@TenantId() tenantId: string, @Param('key') key: string) {
+    return this.files.signedUrl(tenantId, key);
+  }
+
   /** Public download via a short-lived signed URL. */
   @Public()
   @Get(':key')

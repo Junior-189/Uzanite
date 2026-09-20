@@ -4,6 +4,8 @@ import { resumeAudio } from '../utils/beep';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
+import { isRoutedToPlatform } from '../utils/apiRouting';
+import { uploadFile } from '../utils/files';
 import StatusBadge from '../components/StatusBadge';
 import StatCard from '../components/StatCard';
 import PeriodFilter from '../components/PeriodFilter';
@@ -217,11 +219,23 @@ export default function Orders() {
     setPayLoading(true);
     try {
       if (payForm.provider === 'manual') {
-        const fd = new FormData();
-        fd.append('method', payForm.method);
-        fd.append('reference', payForm.reference || '');
-        if (payForm.proof) fd.append('proof', payForm.proof);
-        await api.post(`/payments/orders/${payTarget._id}/manual`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const manualPath = `/payments/orders/${payTarget._id}/manual`;
+        if (isRoutedToPlatform(manualPath)) {
+          // Platform: upload the proof first, then confirm by key (JSON).
+          let proofPath = null;
+          if (payForm.proof) proofPath = (await uploadFile(payForm.proof, 'payment_proof')).key;
+          await api.post(manualPath, {
+            method: payForm.method,
+            reference: payForm.reference || 'N/A',
+            proofPath,
+          });
+        } else {
+          const fd = new FormData();
+          fd.append('method', payForm.method);
+          fd.append('reference', payForm.reference || '');
+          if (payForm.proof) fd.append('proof', payForm.proof);
+          await api.post(manualPath, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
         showToast(t('orders.payment_confirmed'), 'success');
       } else {
         const res = await api.post(`/payments/orders/${payTarget._id}/initiate`, {

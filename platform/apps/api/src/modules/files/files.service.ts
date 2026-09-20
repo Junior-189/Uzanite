@@ -81,6 +81,17 @@ export class FilesService {
     };
   }
 
+  /** Mints a fresh signed URL for a key owned by the caller's tenant. */
+  async signedUrl(tenantId: string, key: string): Promise<{ success: true; url: string; expiresIn: number }> {
+    const meta = await this.prisma.db.storedFile.findFirst({ where: { tenantId, key, deletedAt: null } });
+    if (!meta) throw new NotFoundException('File not found');
+    return {
+      success: true,
+      url: this.storage.url(key),
+      expiresIn: this.config.get<number>('STORAGE_URL_TTL_SECONDS') ?? 900,
+    };
+  }
+
   async download(key: string, exp: unknown, sig: unknown): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
     if (!this.storage.verify(key, Number(exp), String(sig ?? ''))) {
       throw new ForbiddenException('Invalid or expired link');

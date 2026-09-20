@@ -20,10 +20,17 @@ export const PLATFORM_BASE: string = (import.meta.env.VITE_PLATFORM_API_URL as s
 // reconciled and proven with the parity harness.
 // Domains the platform fully covers AND whose client contract matches. Added
 // incrementally as each is proven with the parity harness.
-export const PLATFORM_PREFIXES = ['/auth', '/tenants', '/billing', '/notifications', '/dashboard'] as const;
+export const PLATFORM_PREFIXES = ['/auth', '/tenants', '/billing', '/notifications', '/dashboard', '/payments', '/files'] as const;
 
-// Flows the platform does not implement yet — always legacy, even for `/auth/*`.
-export const LEGACY_ONLY_PREFIXES = ['/auth/google', '/auth/staff', '/auth/theme', '/staff'] as const;
+// Flows the platform does not implement yet — always legacy, even when the
+// domain prefix is otherwise routed (e.g. product bulk-CSV import).
+export const LEGACY_ONLY_PREFIXES = [
+  '/auth/google',
+  '/auth/staff',
+  '/auth/theme',
+  '/staff',
+  '/products/bulk',
+] as const;
 
 export const platformCutoverEnabled: boolean = (import.meta.env.VITE_API_V1 as string) === 'true';
 

@@ -39,6 +39,14 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/tenants/me')).toBe(true);
     expect(m.isRoutedToPlatform('/billing/plans')).toBe(true);
     expect(m.isRoutedToPlatform('/dashboard/stats')).toBe(true);
+    expect(m.isRoutedToPlatform('/payments/orders/x/manual')).toBe(true);
+    expect(m.isRoutedToPlatform('/files')).toBe(true);
+  });
+
+  it('keeps legacy-only sub-paths on legacy even when the prefix is routed', async () => {
+    const m = await loadWithFlag('true');
+    expect(m.isRoutedToPlatform('/products/bulk')).toBe(false);
+    expect(m.apiBaseFor('/products/bulk')).toBe('/api');
   });
 
   it('does not route domains the platform does not implement yet', async () => {
