@@ -30,6 +30,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Expenses | `/api/expenses*` | `/api/v1/expenses*` | **READY** | routed; platform module built + tested (list/totals, create, hard delete). Legacy shape: `_id`, numeric `total` |
 | Purchases | `/api/purchases*` | `/api/v1/purchases*` | **READY** | routed; platform module built + tested (idempotent by `clientRef`, multipart receipt upload + signed `receiptPath`, update, soft delete) |
 | Debts | `/api/debts*` | `/api/v1/debts*` | **READY** | routed; platform module built + tested (list/totals, create/update, partial/full payment, reminders queued via outbox, soft delete). Client `apiAction` signature bug fixed |
+| Reports | `/api/reports/summary`, `/reports/:key`, `/reports/:key/csv` | `/api/v1/reports/...` (same) | **READY** | routed; platform computes summary metrics + CSV/PDF for orders/products/expenses/purchases/debts/staff/full. PDF layout is a functional table design (legacy cover/chart styling is a visual follow-up), data is complete |
 | Messaging / WhatsApp | `/api/whatsapp/{status,qr,connect,disconnect,meta/credentials}` | `/api/v1/whatsapp/{account,templates,messages,conversations}` | **BLOCKED** | legacy QR/Baileys connect flow has no platform equivalent; per-tenant credentials shape differs |
 | Contacts | `/api/contacts*` | `/api/v1/contacts` | **READY** | routed; platform module built + tested (CRUD, soft delete/restore, chat history, outbox email) |
 | Chat | `/api/chat/*` | — | **BLOCKED** | not implemented |
@@ -37,8 +38,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Admin (users) | `/api/admin/users*`, `/api/admin/sub-admins*`, `/api/admin/stats`, `/api/admin/impersonate/:id` | `/api/v1/admin/users*` etc. | **READY** | routed sub-paths; platform module built + tested (list/stats, approve/reject/suspend, update name/email, reset-password, delete, impersonate, sub-admin CRUD). Legacy shapes adapted (`_id`, `businessName`, counts) |
 | Admin (feature-flags) | `/api/admin/feature-flags*` | `/api/v1/admin/feature-flags*` (different shape) | **BLOCKED** | platform has flags but keyed `{key,scope}` shape ≠ legacy `{flags:{...}}` map; remains legacy |
 | Admin (activity-logs/login-attempts) | `/api/admin/{activity-logs,login-attempts}*` | — | **BLOCKED** | not implemented; remains legacy |
-| Dashboard | `/api/dashboard/*` | — | **BLOCKED** | not implemented |
-| Reports | `/api/reports/*` | — | **BLOCKED** | not implemented |
 | Recycle bin | `/api/recycle-bin`, `/restore/:type/:id`, `/:type/:id` | `/api/v1/recycle-bin` (same sub-paths, types: orders/products/contacts/notifications) | **READY** | routed; platform module covers all four client tabs |
 | Broadcast / email | `/api/broadcast/*` | — | **BLOCKED** | not implemented |
 | Privacy | `/api/privacy/{export,erase}` | `/api/v1/privacy/{requests,consent,erase}` | **BLOCKED** | export path/shape differ |
@@ -68,6 +67,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. Platform: build **reports, chat, broadcast, admin feature-flags/activity-logs** (contacts, recycle-bin, products, orders+receipts, staff, admin users done).
+3. Platform: build **chat, broadcast, WhatsApp account lifecycle, Google/theme auth, admin feature-flags/activity-logs** (contacts, recycle-bin, products, orders+receipts, staff, admin users, expenses/purchases/debts, reports done).
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).

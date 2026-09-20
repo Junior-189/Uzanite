@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
 import PeriodFilter from '../components/PeriodFilter';
 import { getAccessToken } from '../utils/tokenStore';
+import { resolveApiUrl } from '../utils/apiRouting';
 import { rowActivate } from '../utils/rowActivate';
 
 const reports = [
@@ -151,11 +152,11 @@ export default function Reports() {
     const params = buildParams(rangeType, lang);
     setDownloading(key);
     if (format === 'csv') {
-      triggerCsvDownload(`/api/reports/${endpoint}/csv?${params}`, `${baseName}.csv`);
+      triggerCsvDownload(resolveApiUrl(`/reports/${endpoint}/csv?${params}`), `${baseName}.csv`);
       addRecent({ key, label, format, period: rangeType, csvData: null });
       setTimeout(() => setDownloading(null), 1200);
     } else {
-      triggerPdfDownload(`/api/reports/${endpoint}?${params}`, `${baseName}.pdf`);
+      triggerPdfDownload(resolveApiUrl(`/reports/${endpoint}?${params}`), `${baseName}.pdf`);
       addRecent({ key, label, format, period: rangeType, csvData: null });
       setTimeout(() => setDownloading(null), 1200);
     }
@@ -166,10 +167,10 @@ export default function Reports() {
     const endpoint = entry.key === 'full' ? 'full' : entry.key;
     const baseName = entry.key === 'full' ? 'full-report' : entry.key + '-report';
     if (entry.format === 'csv') {
-      triggerCsvDownload(`/api/reports/${endpoint}/csv?${params}`, `${baseName}.csv`);
+      triggerCsvDownload(resolveApiUrl(`/reports/${endpoint}/csv?${params}`), `${baseName}.csv`);
       return;
     }
-    triggerPdfDownload(`/api/reports/${endpoint}?${params}`, `${baseName}.pdf`);
+    triggerPdfDownload(resolveApiUrl(`/reports/${endpoint}?${params}`), `${baseName}.pdf`);
   };
 
   const formatBtn = (fmt, label) => (

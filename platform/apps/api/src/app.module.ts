@@ -51,6 +51,7 @@ import { RecycleBinModule } from './modules/recycle-bin/recycle-bin.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { LedgersModule } from './modules/ledgers/ledgers.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -137,6 +138,7 @@ import { LedgersModule } from './modules/ledgers/ledgers.module';
     ContactsModule,
     StaffModule,
     LedgersModule,
+    ReportsModule,
     HealthModule,
   ],
   providers: [

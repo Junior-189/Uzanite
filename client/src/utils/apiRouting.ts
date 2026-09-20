@@ -35,6 +35,7 @@ const DEFAULT_PLATFORM_PREFIXES = [
   '/expenses',
   '/purchases',
   '/debts',
+  '/reports',
   '/staff',
   // Admin-users sub-paths only. `/admin/feature-flags` and
   // `/admin/activity-logs|login-attempts` remain legacy until those domains
