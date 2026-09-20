@@ -47,6 +47,7 @@ import { HealthModule } from './modules/health/health.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
 import { FilesModule } from './modules/files/files.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { RecycleBinModule } from './modules/recycle-bin/recycle-bin.module';
 
 @Module({
   imports: [
@@ -129,6 +130,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     PrivacyModule,
     FilesModule,
     DashboardModule,
+    RecycleBinModule,
     HealthModule,
   ],
   providers: [

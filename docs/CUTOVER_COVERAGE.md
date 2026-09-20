@@ -35,7 +35,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Admin (stats/flags/login-attempts) | `/api/admin/{stats,feature-flags,login-attempts}*` | — | **BLOCKED** | not implemented |
 | Dashboard | `/api/dashboard/*` | — | **BLOCKED** | not implemented |
 | Reports | `/api/reports/*` | — | **BLOCKED** | not implemented |
-| Recycle bin | `/api/recycle-bin/*` | (per-entity restore only) | **BLOCKED** | aggregated recycle-bin API not implemented |
+| Recycle bin | `/api/recycle-bin`, `/restore/:type/:id`, `/:type/:id` | `/api/v1/recycle-bin` (same sub-paths, types: orders/products/notifications) | **READY** | platform module built + tested; **not routed** because the client's `contacts` tab has no platform implementation (routing would silently hide deleted contacts) |
 | Broadcast / email | `/api/broadcast/*` | — | **BLOCKED** | not implemented |
 | Privacy | `/api/privacy/{export,erase}` | `/api/v1/privacy/{requests,consent,erase}` | **BLOCKED** | export path/shape differ |
 
@@ -54,6 +54,8 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Electron | ✅ removed |
 | Platform file uploads (`/api/v1/files`) | ✅ built + tested (migration 0017, `stored_files` RLS) |
 | Platform dashboard (`/api/v1/dashboard/stats`) | ✅ built + tested + routed |
+| Platform recycle bin (`/api/v1/recycle-bin`) | ✅ built + tested (orders/products/notifications) — READY, not routed (contacts tab) |
+| Payment-proof uploads wired (client) | ✅ `/api/v1/files` upload → `proofPath` |
 | Notifications cutover | ✅ routed |
 | Auth / tenancy / billing | ✅ routed / ready |
 | Baileys, Mongo/Express | ⛔ blocked on the remaining platform domains |
