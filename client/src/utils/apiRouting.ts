@@ -20,7 +20,17 @@ export const PLATFORM_BASE: string = (import.meta.env.VITE_PLATFORM_API_URL as s
 // reconciled and proven with the parity harness.
 // Domains the platform fully covers AND whose client contract matches. Added
 // incrementally as each is proven with the parity harness.
-export const PLATFORM_PREFIXES = ['/auth', '/tenants', '/billing', '/notifications', '/dashboard', '/payments', '/files'] as const;
+export const PLATFORM_PREFIXES = [
+  '/auth',
+  '/tenants',
+  '/billing',
+  '/notifications',
+  '/dashboard',
+  '/payments',
+  '/files',
+  '/contacts',
+  '/recycle-bin',
+] as const;
 
 // Flows the platform does not implement yet — always legacy, even when the
 // domain prefix is otherwise routed (e.g. product bulk-CSV import).

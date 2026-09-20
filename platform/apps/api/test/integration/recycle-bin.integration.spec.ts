@@ -9,6 +9,7 @@ import { NotificationsService } from '../../src/modules/notifications/notificati
 import { OutboxService } from '../../src/outbox/outbox.service';
 import { BillingService } from '../../src/modules/billing/billing.service';
 import { LedgerService } from '../../src/modules/finance/ledger.service';
+import { ContactsService } from '../../src/modules/contacts/contacts.service';
 import { runWithRequest } from '../../src/context/tenant-context';
 
 const d = hasDb ? describe : describe.skip;
@@ -26,7 +27,8 @@ d('recycle bin (Postgres)', () => {
     const orders = new OrdersService(h.prisma, stock, outbox, billing, ledger);
     const products = new ProductsService(h.prisma, stock);
     const notifications = new NotificationsService(h.prisma);
-    recycle = new RecycleBinService(h.prisma, orders, products, notifications);
+    const contacts = new ContactsService(h.prisma, outbox, h.config);
+    recycle = new RecycleBinService(h.prisma, orders, products, notifications, contacts);
   });
   afterAll(async () => {
     if (h) await h.prisma.onModuleDestroy();

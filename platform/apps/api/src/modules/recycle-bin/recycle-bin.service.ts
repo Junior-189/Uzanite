@@ -3,8 +3,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { OrdersService } from '../commerce/orders.service';
 import { ProductsService } from '../catalog/products.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ContactsService } from '../contacts/contacts.service';
 
-export type RecycleBinType = 'orders' | 'products' | 'notifications';
+export type RecycleBinType = 'orders' | 'products' | 'notifications' | 'contacts';
 
 const LIST_LIMIT = 200;
 
@@ -22,27 +23,31 @@ export class RecycleBinService {
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
     private readonly products: ProductsService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly contacts: ContactsService
   ) {}
 
   async list(tenantId: string) {
-    const [products, orders, notifications] = await Promise.all([
+    const [products, orders, notifications, contacts] = await Promise.all([
       this.prisma.db.product.findMany({ where: { tenantId, deletedAt: { not: null } }, orderBy: { updatedAt: 'desc' }, take: LIST_LIMIT }),
       this.prisma.db.order.findMany({ where: { tenantId, deletedAt: { not: null } }, orderBy: { updatedAt: 'desc' }, take: LIST_LIMIT }),
       this.prisma.db.notification.findMany({ where: { tenantId, deletedAt: { not: null } }, orderBy: { updatedAt: 'desc' }, take: LIST_LIMIT }),
+      this.prisma.db.whatsAppContact.findMany({ where: { tenantId, deletedAt: { not: null } }, orderBy: { updatedAt: 'desc' }, take: LIST_LIMIT }),
     ]);
-    return { success: true, data: { products, orders, notifications } };
+    return { success: true, data: { products, orders, notifications, contacts } };
   }
 
   async restore(tenantId: string, type: RecycleBinType, id: string, actor: string) {
     if (type === 'orders') return this.orders.restore(tenantId, id, actor);
     if (type === 'products') return this.products.restore(tenantId, id);
+    if (type === 'contacts') return this.contacts.restoreById(tenantId, id);
     return this.notifications.restore(tenantId, id);
   }
 
   async removePermanent(tenantId: string, type: RecycleBinType, id: string, actor: string) {
     if (type === 'orders') return this.removeOrder(tenantId, id);
     if (type === 'products') return this.removeProduct(tenantId, id);
+    if (type === 'contacts') return this.contacts.removeById(tenantId, id, actor, true);
     return this.notifications.remove(tenantId, id, actor, true);
   }
 

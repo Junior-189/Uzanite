@@ -48,6 +48,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
 import { FilesModule } from './modules/files/files.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { RecycleBinModule } from './modules/recycle-bin/recycle-bin.module';
+import { ContactsModule } from './modules/contacts/contacts.module';
 
 @Module({
   imports: [
@@ -131,6 +132,7 @@ import { RecycleBinModule } from './modules/recycle-bin/recycle-bin.module';
     FilesModule,
     DashboardModule,
     RecycleBinModule,
+    ContactsModule,
     HealthModule,
   ],
   providers: [

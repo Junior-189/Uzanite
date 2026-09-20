@@ -41,6 +41,8 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/dashboard/stats')).toBe(true);
     expect(m.isRoutedToPlatform('/payments/orders/x/manual')).toBe(true);
     expect(m.isRoutedToPlatform('/files')).toBe(true);
+    expect(m.isRoutedToPlatform('/contacts')).toBe(true);
+    expect(m.isRoutedToPlatform('/recycle-bin')).toBe(true);
   });
 
   it('keeps legacy-only sub-paths on legacy even when the prefix is routed', async () => {

@@ -10,6 +10,7 @@ export * from './catalog';
 export * from './commerce';
 export * from './dashboard';
 export * from './recycle-bin';
+export * from './contacts';
 export * from './finance';
 export * from './notifications';
 export * from './receipts';

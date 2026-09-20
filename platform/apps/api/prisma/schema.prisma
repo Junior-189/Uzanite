@@ -972,9 +972,13 @@ model WhatsAppContact {
   // PDPA (Tanzania Personal Data Protection Act 2022) consent audit trail.
   consentAt     DateTime? @map("consent_at")
   consentSource String    @default("") @map("consent_source")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  deletedAt     DateTime? @map("deleted_at")
+  optInAt        DateTime? @map("opt_in_at")
+  unsubscribedAt DateTime? @map("unsubscribed_at")
+  isNotified     Boolean   @default(false) @map("is_notified")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   messages Message[]
