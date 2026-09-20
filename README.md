@@ -1,247 +1,289 @@
-# WhatsApp Business Automation SaaS
+# UZANITE
 
-A multi-business WhatsApp commerce system where businesses can connect their WhatsApp number, manage products, receive orders, and track payments — all through WhatsApp chat.
+**Multi-tenant WhatsApp commerce + POS platform for Tanzanian SMEs.**
 
----
+UZANITE lets small businesses run their shop over WhatsApp: customers browse a catalog, place and track orders, and pay via mobile money; owners approve orders and manage stock, debts, expenses, and customers; staff use a web/POS admin. It is **bilingual (English / Kiswahili, Swahili-first)**, **offline-tolerant**, and built for **low-bandwidth, low-end Android** users.
 
-## Tech Stack
-
-- **Node.js** + **Express.js** — API server
-- **MongoDB** + **Mongoose** — database
-- **Baileys** — WhatsApp QR connection (MVP)
-- **Meta WhatsApp Cloud API** — production upgrade path (Phase 9)
+> This repository contains the current, working product: the live **Express + MongoDB** application *and* the new **NestJS + PostgreSQL** platform it is migrating to (Strangler Fig), plus the **React admin**, **Capacitor Android**, and **Electron** clients.
 
 ---
 
-## Quick Start
+## Table of contents
 
-### 1. Install dependencies
+- [Architecture](#architecture)
+- [Features](#features)
+- [Repository layout](#repository-layout)
+- [Tech stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Getting started](#getting-started)
+- [Environment variables](#environment-variables)
+- [Testing](#testing)
+- [Order lifecycle](#order-lifecycle)
+- [WhatsApp flows](#whatsapp-flows)
+- [Payments](#payments)
+- [Security](#security)
+- [Observability & operations](#observability--operations)
+- [Deployment](#deployment)
+- [Documentation](#documentation)
+
+---
+
+## Architecture
+
+UZANITE is mid-migration from a single Express app to a modular NestJS platform. Both run side by side:
+
+```
+                         ┌───────────────────────────┐
+  WhatsApp (Meta Cloud)  │  nginx gateway            │
+  Meta webhook ─────────▶│  /webhook        ─────▶   │  LEGACY  Express + MongoDB  (system of record)
+                         │  /api/*          ─────▶   │          src/**, server.js  (:3000)
+  React admin / Android  │  /api/v1/*       ─────▶   │  PLATFORM NestJS + PostgreSQL (:4000)
+  / POS ────────────────▶│                           │          platform/apps/api
+                         └───────────────────────────┘          platform/apps/worker
+                                                                 (outbox, receipts, WhatsApp, retention)
+```
+
+- **Legacy (live)** — Express 4 + MongoDB/Mongoose at the repo root. Serves production today. Hardened with Zod validation, JWT refresh rotation + token versioning, Meta Cloud API transport (Baileys legacy), BullMQ + Redis queues with a dead-letter queue, AES-256-GCM token encryption, private object storage with signed URLs, and PDPA consent/export/erase.
+- **Platform (new)** — NestJS + PostgreSQL + Prisma monorepo under `platform/`. Migrated Strangler domains (identity, tenancy, billing, catalog, commerce, finance, notifications, receipts, messaging, conversation flows) exposed under `/api/v1`. Includes FORCE row-level security with a non-owner role, a transactional outbox with `FOR UPDATE SKIP LOCKED` + leases, an append-only double-entry journal, keyset pagination, and a background worker.
+- **Clients** — React 19 + Vite admin (`client/`), Capacitor Android (`client/android`), and an Electron desktop shell (`electron/`).
+
+---
+
+## Features
+
+### WhatsApp & conversations
+- **Meta WhatsApp Cloud API** transport (default) with HMAC-verified webhooks and per-tenant credentials; **Baileys** legacy transport available via `WHATSAPP_TRANSPORT=baileys`.
+- Interactive customer flow: language select → main menu → browse catalog → product detail → cart → checkout (name / location / phone / optional negotiated offer) → order confirmation → tracking; payment-proof submission.
+- Admin commands over WhatsApp (see [WhatsApp flows](#whatsapp-flows)).
+- Conversation state machine with inactivity reset, idempotent replies, and a shadow/active rollout flag (`flow_mode = off | shadow | active`).
+
+### Commerce & catalog
+- Products, categories, barcodes, stock levels, low-stock thresholds, expiry warnings.
+- **Single stock-mutation path** with append-only stock movements; stock can never go negative.
+- Order lifecycle with optimistic concurrency, order status history, and a recycle bin (soft delete + restore).
+- Server-authoritative order pricing with negotiation bounds (`minPrice`).
+- Quotes/receipts (PDF and structured), purchase orders, expenses, and debt tracking.
+
+### Payments & finance
+- **Manual mobile money** (M-Pesa / Tigo Pesa / Airtel Money proof + reference) plus **ClickPesa** and **AzamPay** provider adapters (enabled only when credentials are set).
+- Signature-verified provider webhooks with idempotency and amount/currency integrity checks.
+- Append-only **financial ledger** with a balanced **double-entry journal** and a reconciliation invariant.
+- Serialized refunds, receipts, and a nightly-style reconciliation sweep in the worker.
+
+### Customers, communication & operations
+- Contacts/chat, consent tracking (opt-in/opt-out), broadcast/email, notifications.
+- Analytics, reports (PDF/CSV) and dashboards.
+
+### Admin, staff & SaaS
+- Multi-tenant businesses with plans, usage counters, feature flags, and billing.
+- Staff accounts with scoped permissions; platform-admin approval, suspension, and audited impersonation.
+- Privacy/DSP rights: consent log, data export, and pseudonymised erasure (PDPA-oriented).
+
+### Clients & offline
+- Bilingual **EN/SW** UI with full key parity (Swahili default).
+- Offline-first: IndexedDB (Dexie) cache + a durable background sync queue; service worker with stale-while-revalidate.
+- Barcode scanning / POS, bulk CSV import, and low-bandwidth-friendly payloads.
+
+---
+
+## Repository layout
+
+```
+.
+├── server.js                  # Legacy Express entry point
+├── src/                       # Legacy app (routes, models, services, middleware, jobs, queue, whatsapp, payments, lib)
+├── tests/                     # Legacy unit + integration tests (vitest)
+├── scripts/                   # Legacy migrations, seeds, Mongo backup/restore
+├── client/                    # React 19 + Vite admin, Capacitor Android, offline DB
+├── electron/                  # Electron desktop shell
+├── platform/                  # NestJS + PostgreSQL monorepo (pnpm workspace)
+│   ├── apps/api/              # REST API (/api/v1) + Prisma schema/migrations
+│   ├── apps/worker/           # Outbox publisher, receipts, WhatsApp sender, retention, reconciliation
+│   ├── packages/contracts/    # Shared Zod contracts + OpenAPI
+│   ├── packages/messaging/    # Shared Meta client + secret crypto
+│   ├── gateway/               # nginx Strangler routing
+│   ├── docs/                  # Observability, disaster recovery
+│   └── scripts/               # CI, backup/restore, contract check
+├── docs/                      # Android signing
+├── Dockerfile / docker-compose.yml / render.yaml
+└── .env.example               # Legacy env template (platform/ and client/ have their own)
+```
+
+---
+
+## Tech stack
+
+| Area | Legacy (live) | Platform (new) |
+|---|---|---|
+| Runtime | Node.js 20, Express 4 | Node.js 20, NestJS 10 |
+| Database | MongoDB / Mongoose | PostgreSQL 16 + Prisma |
+| Cache / queues | Redis + BullMQ (in-process fallback) | Redis + BullMQ, transactional outbox |
+| Validation | Zod | Zod (`@uzanite/contracts`) |
+| WhatsApp | Meta Cloud API + Baileys | Meta Cloud API |
+| Client | React 19, Vite, Tailwind, Dexie, Capacitor, Electron | — |
+
+---
+
+## Prerequisites
+
+- **Node.js 20+** and npm (root + client) and **pnpm 9** (platform).
+- **MongoDB** (local or Atlas) for the legacy app.
+- **PostgreSQL 16** and **Redis 7** for the platform.
+- **Docker** (optional, for Postgres/Redis and container builds).
+
+---
+
+## Getting started
+
+### 1. Legacy Express + MongoDB app
 ```bash
 npm install
+cp .env.example .env          # set MONGODB_URI and a strong JWT_SECRET (openssl rand -hex 32)
+npm run dev                   # nodemon server.js  -> http://localhost:3000
+npm run worker                # optional dedicated worker (set REDIS_URL; RUN_WORKER_IN_PROCESS=false)
 ```
+When `WHATSAPP_TRANSPORT=baileys`, a QR code appears in the terminal (Linked Devices → Link a Device). With `meta` (default), configure the Meta webhook instead.
 
-### 2. Configure environment
+### 2. NestJS platform (PostgreSQL)
 ```bash
+cd platform
 cp .env.example .env
-# Edit .env with your MongoDB URI, phone number, business name, and payment details
+docker compose up -d postgres redis          # or point DATABASE_URL/REDIS_URL at your own
+pnpm install
+pnpm --filter @uzanite/api prisma:generate
+pnpm --filter @uzanite/api prisma:deploy     # apply migrations (use prisma:migrate in dev)
+pnpm --filter @uzanite/api prisma:seed       # plans + optional bootstrap admin
+pnpm api:dev                                 # API      -> http://localhost:4000/api/v1
+pnpm worker:dev                              # worker (separate terminal)
 ```
+Production requires a **non-owner** DB role (e.g. `uzanite_app`) and `RLS_ENABLED=true`; see `platform/apps/api/prisma/sql/ci-roles.sql`.
 
-### 3. Start MongoDB
+### 3. React admin + Android
 ```bash
-# Local MongoDB
-mongod
-
-# Or use MongoDB Atlas — paste your connection string in .env
+cd client
+npm install
+cp .env.example .env          # set VITE_API_URL and VITE_GOOGLE_CLIENT_ID if using Google sign-in
+npm run dev                   # Vite dev server
+npm run build                 # web build
+npm run build:mobile && npx cap sync android && npm run cap:build:debug
 ```
 
-### 4. Run the server
+### 4. Electron desktop
 ```bash
-npm run dev
-```
-
-### 5. Scan QR code
-A QR code will appear in your terminal. Scan it with WhatsApp (Linked Devices > Link a Device).
-
----
-
-## Project Structure
-
-```
-whatsapp-saas/
-├── server.js                        # Entry point
-├── src/
-│   ├── config/
-│   │   └── database.js              # MongoDB connection
-│   ├── models/
-│   │   ├── Business.js              # Phase 8: multi-tenant
-│   │   ├── Product.js               # Product catalog
-│   │   ├── Order.js                 # Orders with full lifecycle
-│   │   └── Session.js               # Customer conversation state
-│   ├── services/
-│   │   ├── sessionService.js        # Session CRUD + cart
-│   │   ├── productService.js        # Product CRUD
-│   │   ├── orderService.js          # Order CRUD + lifecycle
-│   │   └── notificationService.js   # WhatsApp notifications
-│   ├── whatsapp/
-│   │   ├── client.js                # Baileys connection
-│   │   ├── messageHandler.js        # Routes messages to admin/customer
-│   │   └── flows/
-│   │       ├── customerFlow.js      # Customer bot conversation
-│   │       └── adminFlow.js         # Admin WhatsApp commands
-│   ├── middleware/
-│   │   └── upload.js                # Multer image upload config
-│   └── routes/
-│       ├── products.js              # REST API: product management
-│       ├── orders.js                # REST API: order management
-│       ├── businesses.js            # REST API: business registration
-│       └── webhook.js               # Phase 9: Meta API webhook
-├── sessions/                        # Baileys auth state (gitignored)
-├── uploads/                         # Product images (gitignored)
-├── .env.example
-└── package.json
+npm run electron:dev
+npm run electron:build        # Windows NSIS installer
 ```
 
 ---
 
-## Order Lifecycle
+## Environment variables
+
+Three templates, one per component — never commit real values:
+
+| File | Component | Highlights |
+|---|---|---|
+| `.env.example` | Legacy app | `MONGODB_URI`, `JWT_SECRET`, `CORS_ORIGINS`, `WHATSAPP_TRANSPORT`, `META_APP_SECRET`, `ENCRYPTION_KEY`, `REDIS_URL`, payment + storage + SMTP settings |
+| `platform/.env.example` | NestJS API + worker | `DATABASE_URL` (non-owner, pool-sized), `REDIS_URL`, `JWT_SECRET`, `RLS_ENABLED`, `TRUST_PROXY_HOPS`, cache TTLs, retention, `METRICS_TOKEN`, `SENTRY_DSN`, `OTEL_*`, `META_*`, SMTP |
+| `client/.env.example` | React client | `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID` |
+
+At least 32 characters and non-placeholder secrets are enforced at boot on both stacks.
+
+---
+
+## Testing
+
+```bash
+# Legacy (Express/Mongo) — unit + integration
+npm test
+
+# Platform — full CI: typecheck, Prisma drift gate, tests, build
+cd platform && bash scripts/ci-local.sh      # needs TEST_DATABASE_URL / TEST_APP_DATABASE_URL / SHADOW_DATABASE_URL / JWT_SECRET
+pnpm test                                    # tests only
+
+# Client
+cd client && npm test && npm run lint
+```
+
+GitHub Actions runs legacy CI, platform CI (Postgres + Redis services), and a security workflow (dependency audit, secret scanning, SAST, image scanning).
+
+---
+
+## Order lifecycle
 
 ```
-PENDING → APPROVED → PENDING_PAYMENT → PAID → DELIVERED
-        ↘ REJECTED
+PENDING ──▶ APPROVED ──▶ PENDING_PAYMENT ──▶ PAID ──▶ DELIVERED
+      └──▶ REJECTED (restores stock)
 ```
 
 ---
 
-## Customer Bot Flow
+## WhatsApp flows
 
-Customers interact via WhatsApp:
+**Customer** (interactive): language selection → main menu → browse → product detail → cart → checkout → order placed → track with `TRACK ORD-...`; payment references are captured at the menu or the payment step.
 
-```
-1. Send any message → Main Menu
-2. Reply "1" → Browse products
-3. Reply product number → View details + image
-4. Enter quantity → Add to cart
-5. Reply "1" (checkout) → Enter name → Order placed
-6. Receive order number → Track with "TRACK ORD-xxx"
-```
-
----
-
-## Admin WhatsApp Commands
-
-Send these from your admin WhatsApp number:
+**Admin** commands:
 
 | Command | Description |
-|---------|-------------|
-| `ORDERS` | View all pending orders |
-| `ORDERS APPROVED` | Filter by status |
-| `TRACK ORD-20240101-0001` | View order details |
-| `APPROVE ORD-xxx` | Approve an order |
-| `REJECT ORD-xxx reason` | Reject with reason |
-| `PAY ORD-xxx` | Send payment request to customer |
-| `CONFIRM_PAYMENT ORD-xxx mpesa REF123` | Confirm payment |
-| `DELIVER ORD-xxx note` | Mark as delivered |
-| `PRODUCTS` | List all products |
+|---|---|
 | `HELP` | Show all commands |
+| `PRODUCTS` | List products |
+| `QUICK_ADD name\|description\|price\|stock` | Quickly add a product |
+| `ORDERS [STATUS]` | List orders (optionally filtered) |
+| `TRACK ORD-...` | Show an order |
+| `APPROVE ORD-... [note]` | Approve an order |
+| `REJECT ORD-... [reason]` | Reject an order |
+| `PAY ORD-...` | Request payment from the customer |
+| `CONFIRM_PAYMENT ORD-... [method] [reference]` | Confirm payment |
+| `DELIVER ORD-... [note]` | Mark delivered |
+
+On the platform, conversation rollout is controlled per tenant via `flow_mode` (`off` = legacy owns the flow, `shadow` = compute only, `active` = NestJS replies) and `bot_paused`.
 
 ---
 
-## REST API
+## Payments
 
-### Products
-```
-GET    /api/products           # List all products
-GET    /api/products/:id       # Get one product
-POST   /api/products           # Create product (multipart/form-data, field: image)
-PUT    /api/products/:id       # Update product
-DELETE /api/products/:id       # Soft-delete product
-```
-
-### Orders
-```
-GET    /api/orders                      # List orders (?status=PENDING&businessId=xxx)
-GET    /api/orders/:id                  # Get one order
-POST   /api/orders/:id/approve          # Approve order
-POST   /api/orders/:id/reject           # Reject order { reason }
-POST   /api/orders/:id/request-payment  # Request payment
-POST   /api/orders/:id/confirm-payment  # Confirm payment { method, reference }
-POST   /api/orders/:id/deliver          # Mark delivered { note }
-```
-
-### Businesses (Phase 8)
-```
-GET    /api/businesses          # List businesses
-POST   /api/businesses          # Register business { businessId, name, phone }
-PUT    /api/businesses/:id      # Update business
-```
-
-### Meta Webhook (Phase 9)
-```
-GET    /webhook                 # Verification challenge
-POST   /webhook                 # Incoming messages
-```
+- **Manual mobile money** (default): the admin confirms a customer's M-Pesa/Tigo/Airtel reference; a Payment, ledger entry, and balanced journal are written transactionally.
+- **ClickPesa / AzamPay**: enabled only when their credentials are configured; webhooks are signature-verified and idempotent, with amount/currency integrity checks.
+- Webhook endpoints: `POST /webhook/payments/:provider` (legacy) and `POST /api/v1/payments/webhook/:provider` (platform).
 
 ---
 
-## Adding Products
+## Security
 
-### Via REST API (recommended)
-```bash
-curl -X POST http://localhost:3000/api/products \
-  -F "name=iPhone Case" \
-  -F "description=Premium leather case" \
-  -F "price=15000" \
-  -F "currency=TZS" \
-  -F "stock=50" \
-  -F "image=@/path/to/image.jpg"
-```
-
-### Via MongoDB directly
-```js
-db.products.insertOne({
-  name: "T-Shirt",
-  price: 20000,
-  currency: "TZS",
-  description: "Cotton, sizes S-XL",
-  businessId: "default",
-  active: true
-})
-```
+- **Authentication:** JWT access tokens + rotating refresh tokens with reuse detection and token-version revocation; bcrypt password hashing; password policy; account lockout.
+- **Tenant isolation:** application-level scoping (AsyncLocalStorage + Mongoose plugin on legacy; Prisma tenant extension on platform) **plus** PostgreSQL **FORCE row-level security** with a non-owner, non-bypass DB role and a boot-time assertion.
+- **Input safety:** Zod validation everywhere, parameterised SQL only (a CI guard forbids unsafe raw SQL), regex inputs escaped (ReDoS), rate limiting on auth, APIs, webhooks, and metrics.
+- **Secrets & transport:** AES-256-GCM encryption for provider tokens, HMAC webhook verification, Helmet-equivalent security headers, strict CORS allow-list, placeholder-secret rejection at boot.
+- **Privacy:** consent tracking, data export, and pseudonymised erasure; financial records are retained but stripped of PII.
+- **Access control:** role/permission-based staff access, audited admin impersonation, and cross-tenant admin auditing.
 
 ---
 
-## Payment Flow (Manual — MVP)
+## Observability & operations
 
-1. Admin approves order → customer receives payment details (M-Pesa/Tigo/Airtel numbers)
-2. Customer pays and sends transaction reference via WhatsApp
-3. Admin verifies and runs: `CONFIRM_PAYMENT ORD-xxx mpesa REF123`
-4. Customer receives confirmation
-5. Admin ships and runs: `DELIVER ORD-xxx`
-
----
-
-## Phase 9: Migrating to Meta WhatsApp Cloud API
-
-The business logic is fully decoupled from the transport layer. To switch:
-
-1. Create a Meta Business account and WhatsApp Business App at [developers.facebook.com](https://developers.facebook.com)
-2. Get your `META_API_TOKEN` and `META_PHONE_NUMBER_ID`
-3. Set `META_WEBHOOK_VERIFY_TOKEN` to any random string
-4. Deploy the server to a public URL (e.g. Railway, Render, VPS)
-5. Register webhook URL: `https://yourdomain.com/webhook`
-6. Update `.env` with Meta credentials
-7. Replace `sendMessage` calls in `notificationService.js` with `metaSendText()` from `webhook.js`
-8. Remove Baileys — `client.js` is no longer needed
-
-The flow handlers (`customerFlow.js`, `adminFlow.js`) require **zero changes**.
+- Structured JSON logs (Pino) with request/trace correlation; W3C `traceparent` propagation; optional OTLP span export; Sentry-compatible error tracking.
+- Prometheus `/metrics` (token-protected) covering HTTP, payment-webhook outcomes, outbox, WhatsApp queue, and business/ledger indicators.
+- Worker responsibilities: transactional outbox dispatch, WhatsApp outbound sending, receipt/notification writing, **double-entry reconciliation** with alerts, and **PDPA retention sweeps**.
+- Backups: `scripts/backup-mongo.sh` / `restore-mongo.sh` (legacy) and `platform/scripts/backup-postgres.sh` / `restore-postgres.sh` (platform).
 
 ---
 
-## Multi-Business (Phase 8)
+## Deployment
 
-To run multiple businesses on one server:
-
-1. Register each business via `POST /api/businesses`
-2. Each business gets a unique `businessId`
-3. Products and orders are scoped by `businessId`
-4. Each business needs its own WhatsApp number (Baileys: multiple sessions; Meta API: multiple phone numbers)
+- **Containers:** root `Dockerfile` (legacy) and `platform/Dockerfile.api` / `Dockerfile.worker` (multi-stage, non-root, health-checked, with a one-shot migration stage). `docker-compose.yml` brings up Postgres/Redis.
+- **Gateway:** `platform/gateway/nginx.conf` routes migrated `/api/v1/(auth|tenants|billing|admin)` to NestJS and everything else to Express.
+- **PaaS:** `render.yaml` for the legacy app.
+- See **[DEPLOYMENT.md](DEPLOYMENT.md)** for process model, environment, migrations, backups, and scaling; **[platform/docs/DISASTER_RECOVERY.md](platform/docs/DISASTER_RECOVERY.md)** for recovery procedures.
 
 ---
 
-## Environment Variables
+## Documentation
 
-| Variable | Description |
-|----------|-------------|
-| `PORT` | Server port (default: 3000) |
-| `MONGODB_URI` | MongoDB connection string |
-| `ADMIN_PHONE` | Admin WhatsApp number (digits only, e.g. `255712345678`) |
-| `BUSINESS_NAME` | Your shop name (shown in bot messages) |
-| `BUSINESS_ID` | Business identifier (default: `default`) |
-| `MPESA_NUMBER` | M-Pesa payment number |
-| `MPESA_NAME` | M-Pesa account name |
-| `TIGO_NUMBER` | Tigo Pesa number |
-| `AIRTEL_NUMBER` | Airtel Money number |
-| `UPLOAD_DIR` | Image upload directory (default: `uploads`) |
-| `META_API_TOKEN` | Meta API bearer token (Phase 9) |
-| `META_PHONE_NUMBER_ID` | Meta phone number ID (Phase 9) |
-| `META_WEBHOOK_VERIFY_TOKEN` | Webhook verification token (Phase 9) |
+| Document | Contents |
+|---|---|
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Deployment, environment, scaling, backups |
+| [platform/README.md](platform/README.md) | Platform layout, local run, RLS, outbox, migrations |
+| [platform/docs/OBSERVABILITY.md](platform/docs/OBSERVABILITY.md) | Logs, tracing, metrics, alerting |
+| [platform/docs/DISASTER_RECOVERY.md](platform/docs/DISASTER_RECOVERY.md) | Backup/restore and recovery drills |
+| [docs/ANDROID_SIGNING.md](docs/ANDROID_SIGNING.md) | Android release signing |
+| [platform/loadtest/README.md](platform/loadtest/README.md) | Load-test suite usage |
