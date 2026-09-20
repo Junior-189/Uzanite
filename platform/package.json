@@ -1,0 +1,30 @@
+{
+  "name": "uzanite-platform",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "description": "UZANITE platform (NestJS + PostgreSQL + Prisma) \u2014 Phase M1 skeleton",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "api:dev": "pnpm --filter @uzanite/api start:dev",
+    "worker:dev": "pnpm --filter @uzanite/worker start:dev",
+    "prisma:generate": "pnpm --filter @uzanite/api prisma:generate",
+    "prisma:migrate": "pnpm --filter @uzanite/api prisma:migrate",
+    "prisma:seed": "pnpm --filter @uzanite/api prisma:seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser": "^1.20.6",
+      "file-type": "^21.3.2",
+      "js-yaml": "^4.3.2",
+      "lodash": "^4.18.0",
+      "multer": "^2.3.0",
+      "qs": "^6.16.0"
+    }
+  }
+}

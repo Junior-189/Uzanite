@@ -1,0 +1,8 @@
+{
+  "name": "uzanite-desktop",
+  "version": "1.0.0",
+  "description": "UZANITE Desktop App",
+  "main": "main.js",
+  "author": "UZANITE",
+  "dependencies": {}
+}

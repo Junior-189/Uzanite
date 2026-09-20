@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Excludes app data from device backup and device-to-device transfer.
+
+  The WebView stores the session (refresh token in sessionStorage) and the
+  offline Dexie database, which holds tenant business data. Neither should be
+  copied into a Google backup or onto a new device outside the app's own login
+  flow, so both cloud backup and device transfer are disabled entirely.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-09-11T13:38:02.313Z",
+  "mongo": {
+    "tenantUsers": 2,
+    "allUsers": 3,
+    "staffs": 1,
+    "businesses": 1
+  },
+  "postgres": {
+    "tenants": 3,
+    "users": 6,
+    "memberships": 4,
+    "subscriptions": 3
+  },
+  "expectations": {
+    "tenants": "<= 3",
+    "users": "<= 4",
+    "memberships": "<= 3",
+    "subscriptions": "<= 2"
+  }
+}

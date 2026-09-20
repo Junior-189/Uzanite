@@ -1,0 +1,94 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "com.whatsappsaas.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.whatsappsaas.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 2
+        versionName "1.1"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // Signing credentials come from the environment or an untracked
+    // keystore.properties — never from source control.
+    //
+    // The previous hard-coded password meant anyone with repository access (and
+    // the keystore, which was git-ignored but present on build machines) could
+    // sign an APK that Android would treat as a genuine UZANITE update. The key
+    // must be rotated; see docs/ANDROID_SIGNING.md.
+    signingConfigs {
+        release {
+            def keystorePropsFile = rootProject.file('keystore.properties')
+            def props = new Properties()
+            if (keystorePropsFile.exists()) {
+                props.load(new FileInputStream(keystorePropsFile))
+            }
+
+            def resolvedStoreFile = System.getenv('UZANITE_KEYSTORE_PATH') ?: props.getProperty('storeFile')
+            def resolvedStorePassword = System.getenv('UZANITE_KEYSTORE_PASSWORD') ?: props.getProperty('storePassword')
+            def resolvedKeyAlias = System.getenv('UZANITE_KEY_ALIAS') ?: props.getProperty('keyAlias')
+            def resolvedKeyPassword = System.getenv('UZANITE_KEY_PASSWORD') ?: props.getProperty('keyPassword')
+
+            if (resolvedStoreFile && resolvedStorePassword && resolvedKeyAlias && resolvedKeyPassword) {
+                storeFile file(resolvedStoreFile)
+                storePassword resolvedStorePassword
+                keyAlias resolvedKeyAlias
+                keyPassword resolvedKeyPassword
+            } else {
+                // Leave unconfigured so a debug build still works. A release
+                // build fails below with an actionable message instead of
+                // silently producing an unsigned or wrongly-signed APK.
+                logger.warn('UZANITE: release signing is not configured (set UZANITE_KEYSTORE_* env vars or keystore.properties)')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            // Shrink and obfuscate: a readable release bundle hands an attacker
+            // a map of the app.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

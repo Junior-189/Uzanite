@@ -1,0 +1,95 @@
+name: Platform CI (NestJS)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-ci.yml'
+  pull_request:
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: platform-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: platform
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: uzanite
+          POSTGRES_PASSWORD: uzanite
+          POSTGRES_DB: uzanite
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U uzanite"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://uzanite:uzanite@localhost:5432/uzanite?schema=public
+      TEST_DATABASE_URL: postgresql://uzanite:uzanite@localhost:5432/uzanite?schema=public
+      TEST_APP_DATABASE_URL: postgresql://uzanite_app:uzanite_app@localhost:5432/uzanite?schema=public
+      SHADOW_DATABASE_URL: postgresql://uzanite:uzanite@localhost:5432/shadow?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-secret-key-0123456789abcdef0123456789abcdef
+      RLS_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: platform/pnpm-lock.yaml
+
+      # The pipeline itself lives in scripts/ci-local.sh so that CI and local
+      # verification run byte-for-byte the same steps.
+      - name: Run platform CI pipeline
+        run: bash scripts/ci-local.sh
+
+      # API contract gate. The Capacitor Android build hard-codes its API base
+      # URL at build time, so a shipped install cannot be repointed without a
+      # store update — a removed or tightened endpoint breaks real users in the
+      # field. This fails the build on a breaking change.
+      - name: Generate current OpenAPI document
+        working-directory: platform/apps/api
+        env:
+          SKIP_DB_CONNECT: 'true'
+        run: node dist/openapi.js /tmp/openapi-current.json
+
+      - name: Check for breaking API changes
+        working-directory: platform
+        run: node scripts/api-contract-check.mjs apps/api/openapi.json /tmp/openapi-current.json
+
+      - name: Upload OpenAPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: /tmp/openapi-current.json

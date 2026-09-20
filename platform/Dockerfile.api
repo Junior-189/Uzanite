@@ -1,0 +1,50 @@
+# ── Build stage ──────────────────────────────────────────────────────────────
+FROM node:20-bookworm-slim AS build
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN corepack enable
+WORKDIR /app
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @uzanite/contracts build
+RUN pnpm --filter @uzanite/messaging build
+RUN pnpm --filter @uzanite/api exec prisma generate
+RUN pnpm --filter @uzanite/api build
+
+# ── Migration stage ─────────────────────────────────────────────────────────
+# Used by the one-shot migrate job. Keeps the Prisma CLI (a devDependency) that
+# the pruned runtime image deliberately does not ship. Runs as the DB owner.
+FROM build AS migrate
+WORKDIR /app/apps/api
+CMD ["npx", "prisma", "migrate", "deploy"]
+
+# ── Runtime stage ────────────────────────────────────────────────────────────
+FROM node:20-bookworm-slim AS runtime
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV NODE_ENV=production
+# Node is PID 1 and the app registers shutdown hooks, but tini reaps orphaned
+# children (Prisma engine) cleanly on SIGTERM.
+RUN apt-get update -y && apt-get install -y --no-install-recommends tini \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=build --chown=node:node /app /app
+# Drop build-only dependencies from the RUNTIME image only (the migrate stage
+# still needs the Prisma CLI). Previously the runtime shipped devDependencies,
+# sources and build caches — a bigger image and a bigger attack surface for no
+# benefit. `prisma generate` already wrote the client into node_modules, so it
+# survives the prune.
+RUN corepack enable \
+ && pnpm prune --prod --config.ignore-scripts=true \
+ && rm -rf /app/apps/api/src /app/apps/api/test /app/packages/*/src \
+ && rm -rf /root/.cache /root/.local/share/pnpm/store /app/apps/api/tsconfig*.json
+USER node
+WORKDIR /app/apps/api
+EXPOSE 4000
+# `prisma/` is retained so a migration init job can run from this same image.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "dist/main.js"]

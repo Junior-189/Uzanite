@@ -1,0 +1,11 @@
+{
+  "appId": "com.uzer.app",
+  "appName": "UZANITE",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

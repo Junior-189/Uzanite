@@ -1,0 +1,4 @@
+/admin/app-debug.apk       /app-debug.apk       200
+/admin/DukaBora-Setup.exe  /DukaBora-Setup.exe  200
+/admin/*                   /index.html          200
+/*                         /index.html          200

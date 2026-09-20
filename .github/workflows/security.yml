@@ -1,0 +1,103 @@
+name: Security
+
+# Dependency, secret and container scanning. None of this existed before M13,
+# so vulnerable components and leaked credentials were entirely unmonitored —
+# the audit could only flag known-EOL packages by reading manifests.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly: new advisories land against unchanged code, so scanning only on
+    # push would miss them.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Audit legacy app dependencies
+        # `--omit=dev` because a devDependency advisory cannot be exploited in
+        # production. High and critical fail the build; moderate is reported.
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit client dependencies
+        working-directory: client
+        run: npm audit --omit=dev --audit-level=high
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Audit platform dependencies
+        working-directory: platform
+        run: pnpm audit --prod --audit-level high
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so a secret committed earlier and later removed is
+          # still found — removing it from HEAD does not unpublish it.
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  code-scan:
+    name: Static analysis (CodeQL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # Includes the injection, XSS and auth queries beyond the default set.
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+
+  container-scan:
+    name: Container image scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        working-directory: platform
+        run: docker build -f Dockerfile.api -t uzanite-api:scan .
+
+      - name: Build worker image
+        working-directory: platform
+        run: docker build -f Dockerfile.worker -t uzanite-worker:scan .
+
+      - name: Scan API image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: uzanite-api:scan
+          severity: 'HIGH,CRITICAL'
+          # OS packages in the base image are updated by rebasing, not by us,
+          # so unfixed findings should not block a deploy.
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Scan worker image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: uzanite-worker:scan
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: '1'

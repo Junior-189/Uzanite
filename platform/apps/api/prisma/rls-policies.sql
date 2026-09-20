@@ -1,0 +1,30 @@
+-- ============================================================================
+-- UZANITE — Row Level Security reference (Phase M2, NOT applied in M1)
+-- ============================================================================
+-- M1 enforces tenant isolation structurally at the application layer via the
+-- Prisma tenant-scope extension (fails closed without a tenant/system context).
+-- These policies are the planned PostgreSQL backstop.
+--
+-- To apply in M2:
+--   1. Create a non-superuser, non-BYPASSRLS role for the app and use it in
+--      DATABASE_URL. Migrations run as the owner role.
+--   2. Wrap each request in a transaction and run, before any query:
+--        SET LOCAL app.current_tenant = '<tenant-uuid>';
+--      With PgBouncer, use transaction pooling and always inside a transaction.
+--   3. Apply the policies below for every tenant-owned table.
+--
+-- Example for the current M1 tenant-owned tables:
+-- ============================================================================
+
+-- ALTER TABLE "memberships"             ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE "tenant_settings"         ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE "tenant_payment_methods"  ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE "subscriptions"           ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE "usage_counters"          ENABLE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY memberships_tenant_isolation ON "memberships"
+--   USING (tenant_id = current_setting('app.current_tenant', true)::uuid)
+--   WITH CHECK (tenant_id = current_setting('app.current_tenant', true)::uuid);
+--
+-- (repeat the CREATE POLICY pattern for each table above, and FORCE ROW LEVEL
+--  SECURITY once the unit-of-work always sets the session variable.)

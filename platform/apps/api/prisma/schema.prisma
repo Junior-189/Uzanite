@@ -1,0 +1,1083 @@
+// UZANITE — Phase M1 Prisma schema (Identity + Tenancy + Billing foundation).
+// System of record for the NestJS migration. Mongo/Express remains the source of
+// truth for unmigrated domains (catalog, commerce, finance, messaging).
+
+generator client {
+  provider = "prisma-client-js"
+  // `metrics` exposes connection-pool gauges via `prisma.$metrics`. Pool
+  // saturation is the first real ceiling this system will hit under load, and
+  // it was previously invisible — there was no way to tell a slow query from an
+  // exhausted pool.
+  previewFeatures = ["metrics"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+enum TenantStatus {
+  pending
+  approved
+  rejected
+  suspended
+}
+
+enum UserStatus {
+  active
+  inactive
+  pending
+  rejected
+  suspended
+}
+
+enum PlatformRole {
+  super_admin
+  sub_admin
+}
+
+enum MembershipRole {
+  owner
+  manager
+  staff
+}
+
+enum SubscriptionStatus {
+  active
+  trialing
+  past_due
+  canceled
+}
+
+enum FlagScope {
+  global
+  tenant
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  published
+  failed
+}
+
+enum StockReason {
+  restock
+  manual_adjust
+  order_created
+  order_rejected
+  order_deleted
+  order_restored
+}
+
+// ── Commerce (Phase M4) ──────────────────────────────────────────────────────
+// Values mirror the legacy Express ORDER_STATUS enum exactly for compatibility.
+enum OrderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PENDING_PAYMENT
+  PAID
+  DELIVERED
+}
+
+enum OrderSource {
+  whatsapp
+  cash
+}
+
+// ── Finance (Phase M5) ───────────────────────────────────────────────────────
+enum PaymentStatus {
+  initiated
+  pending
+  processing
+  succeeded
+  failed
+  cancelled
+  refunded
+}
+
+enum PaymentProvider {
+  manual
+  clickpesa
+  azampay
+}
+
+enum LedgerEntryType {
+  payment_in
+  cash_sale
+  refund
+  adjustment
+}
+
+enum LedgerDirection {
+  credit
+  debit
+}
+
+enum RefundStatus {
+  succeeded
+  failed
+}
+
+// ── Identity bridge (M2 gate C4) ─────────────────────────────────────────────
+// Explicit, auditable mapping between legacy external identities (Mongo
+// ObjectIds / business slugs) and platform UUIDs, used to resolve tokens issued
+// by either system during the Strangler transition.
+enum IdentityAliasKind {
+  user
+  staff
+  tenant
+}
+
+// ── Notifications & Receipts (Phase M6) ─────────────────────────────────────
+enum NotificationPriority {
+  low
+  normal
+  high
+  critical
+}
+
+enum ReceiptType {
+  order
+  payment
+}
+
+// ── Messaging (Phase M7) ─────────────────────────────────────────────────────
+enum WhatsAppAccountStatus {
+  pending
+  connected
+  disconnected
+  error
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum MessageStatus {
+  queued
+  sending
+  sent
+  delivered
+  read
+  failed
+  received
+}
+
+// Conversation-flow rollout mode (Phase M8). Default `off` = Express owns the flow.
+enum WhatsAppFlowMode {
+  off
+  shadow
+  active
+}
+
+// ── Tenancy ──────────────────────────────────────────────────────────────────
+model Tenant {
+  id          String       @id @db.Uuid
+  slug        String       @unique @db.Citext
+  legacyId    String?      @unique @map("legacy_id")
+  name        String
+  status      TenantStatus @default(pending)
+  currency    String       @default("TZS") @db.Char(3)
+  timezone    String       @default("Africa/Dar_es_Salaam")
+  phone       String?
+  country     String       @default("TZ") @db.Char(2)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  deletedAt   DateTime?    @map("deleted_at")
+
+  settings         TenantSettings?
+  paymentMethods   TenantPaymentMethod[]
+  memberships      Membership[]
+  membershipInvites MembershipInvite[]
+  subscription    Subscription?
+  usageCounters   UsageCounter[]
+  featureFlags    FeatureFlag[]
+  products        Product[]
+  stockMovements  StockMovement[]
+  categories      Category[]
+
+  orders             Order[]
+  orderItems         OrderItem[]
+  orderStatusHistory OrderStatusHistory[]
+  orderCounters      OrderCounter[]
+
+  payments       Payment[]
+  paymentAttempts PaymentAttempt[]
+  ledgerEntries  LedgerEntry[]
+  journalEntries JournalEntry[]
+  journalLines   JournalLine[]
+  refunds        Refund[]
+
+  identityAliases IdentityAlias[]
+
+  notifications Notification[]
+  receipts      Receipt[]
+
+  whatsappAccounts   WhatsAppAccount[]
+  whatsappTemplates  WhatsAppTemplate[]
+  whatsappContacts   WhatsAppContact[]
+  messages           Message[]
+  webhookEvents      WebhookEvent[]
+  conversations      Conversation[]
+  flowTraces         FlowTrace[]
+
+  privacyRequests PrivacyRequest[]
+
+  @@map("tenants")
+}
+
+model TenantSettings {
+  tenantId  String   @id @map("tenant_id") @db.Uuid
+  theme     String   @default("light")
+  settings  Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_settings")
+}
+
+model TenantPaymentMethod {
+  id          String  @id @db.Uuid
+  tenantId    String  @map("tenant_id") @db.Uuid
+  provider    String
+  number      String
+  accountName String? @map("account_name")
+  active      Boolean @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@map("tenant_payment_methods")
+}
+
+// ── Identity ─────────────────────────────────────────────────────────────────
+model User {
+  id                 String        @id @db.Uuid
+  email              String        @unique @db.Citext
+  legacyId           String?       @unique @map("legacy_id")
+  passwordHash       String?       @map("password_hash")
+  name               String
+  phone              String?
+  avatarUrl          String?       @map("avatar_url")
+  authProvider       String        @default("local") @map("auth_provider")
+  platformRole       PlatformRole? @map("platform_role")
+  status             UserStatus    @default(active)
+  tokenVersion       Int           @default(0) @map("token_version")
+  mustChangePassword Boolean       @default(false) @map("must_change_password")
+  emailVerifiedAt    DateTime?     @map("email_verified_at")
+  lastLoginAt        DateTime?     @map("last_login_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  deletedAt          DateTime?     @map("deleted_at")
+
+  memberships    Membership[]
+  refreshTokens  RefreshToken[]
+  resetTokens    PasswordResetToken[]
+  loginAttempts  LoginAttempt[]
+  identityAliases IdentityAlias[]
+
+  @@map("users")
+}
+
+model Membership {
+  id          String         @id @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  role        MembershipRole
+  permissions String[]       @default([])
+  status      String         @default("active")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@map("memberships")
+}
+
+// Single-use, expiring invitation to join a tenant (Phase M12 membership
+// lifecycle). The raw token is emailed; only its hash is stored.
+model MembershipInvite {
+  id          String         @id @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  email       String         @db.Citext
+  role        MembershipRole
+  permissions String[]       @default([])
+  tokenHash   String         @unique @map("token_hash")
+  invitedBy   String         @map("invited_by")
+  expiresAt   DateTime       @map("expires_at")
+  usedAt      DateTime?      @map("used_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("membership_invites")
+}
+
+model RefreshToken {
+  id         String    @id @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  replacedBy String?   @map("replaced_by")
+  ip         String?
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model LoginAttempt {
+  id        BigInt   @id @default(autoincrement())
+  email     String?  @db.Citext
+  userId    String?  @map("user_id") @db.Uuid
+  status    String
+  reason    String?
+  ip        String?
+  userAgent String?  @map("user_agent")
+  device    String?
+  browser   String?
+  os        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([email])
+  @@map("login_attempts")
+}
+
+// ── Billing ──────────────────────────────────────────────────────────────────
+model Plan {
+  key       String  @id
+  name      String
+  priceTzs  Decimal @default(0) @map("price_tzs") @db.Decimal(14, 2)
+  limits    Json    @default("{}")
+  features  Json    @default("{}")
+  active    Boolean @default(true)
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                 String             @id @db.Uuid
+  tenantId           String             @unique @map("tenant_id") @db.Uuid
+  planKey            String             @map("plan_key")
+  status             SubscriptionStatus @default(active)
+  trialEndsAt        DateTime?          @map("trial_ends_at")
+  currentPeriodStart DateTime?          @map("current_period_start")
+  currentPeriodEnd   DateTime?          @map("current_period_end")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   Plan   @relation(fields: [planKey], references: [key])
+
+  @@map("subscriptions")
+}
+
+model UsageCounter {
+  id        String @id @db.Uuid
+  tenantId  String @map("tenant_id") @db.Uuid
+  metric    String
+  periodKey String @map("period_key")
+  count     BigInt @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, metric, periodKey])
+  @@map("usage_counters")
+}
+
+// ── Platform ─────────────────────────────────────────────────────────────────
+model FeatureFlag {
+  id       String    @id @db.Uuid
+  legacyId String?   @unique @map("legacy_id")
+  scope    FlagScope
+  tenantId String?   @map("tenant_id") @db.Uuid
+  key      String
+  enabled  Boolean   @default(true)
+  message  String    @default("")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([scope, tenantId, key])
+  @@map("feature_flags")
+}
+
+model ActivityLog {
+  id        BigInt   @id @default(autoincrement())
+  tenantId  String?  @map("tenant_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  page      String
+  action    String
+  duration  Int      @default(0)
+  ip        String?
+  userAgent String?  @map("user_agent")
+  device    String?
+  browser   String?
+  os        String?
+  referrer  String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model OutboxEvent {
+  id          String       @id @db.Uuid
+  tenantId    String?      @map("tenant_id") @db.Uuid
+  type        String
+  payload     Json
+  status      OutboxStatus @default(pending)
+  attempts    Int          @default(0)
+  availableAt DateTime     @default(now()) @map("available_at")
+  // Set when a worker claims the row (status `processing`). Used to recover
+  // events from crashed workers via a lease timeout.
+  lockedAt    DateTime?    @map("locked_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  publishedAt DateTime?    @map("published_at")
+
+  @@index([status, availableAt])
+  @@index([status, lockedAt])
+  @@map("outbox_events")
+}
+
+// ── Catalog (Phase M3) ───────────────────────────────────────────────────────
+model Product {
+  id                String    @id @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  name              String
+  description       String    @default("")
+  barcode           String?
+  price             Decimal   @db.Decimal(14, 2)
+  minPrice          Decimal   @default(0) @map("min_price") @db.Decimal(14, 2)
+  cost              Decimal   @default(0) @db.Decimal(14, 2)
+  currency          String    @default("TZS") @db.Char(3)
+  stock             Int       @default(0)
+  lowStockThreshold Int       @default(5) @map("low_stock_threshold")
+  expiryDate        DateTime? @map("expiry_date") @db.Date
+  expiryWarnDays    Int       @default(7) @map("expiry_warn_days")
+  imageKey          String?   @map("image_key")
+  categoryId        String?   @map("category_id") @db.Uuid
+  recordedBy        String?   @map("recorded_by")
+  active            Boolean   @default(true)
+  version           Int       @default(0)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+  deletedBy         String?   @map("deleted_by") @db.Uuid
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category  Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  movements StockMovement[]
+  orderItems OrderItem[]
+
+  @@index([tenantId, active, deletedAt, id])
+  @@index([tenantId, barcode])
+  @@index([tenantId, name])
+  @@index([tenantId, categoryId, id])
+  @@map("products")
+}
+
+model StockMovement {
+  id           String      @id @db.Uuid
+  tenantId     String      @map("tenant_id") @db.Uuid
+  productId    String      @map("product_id") @db.Uuid
+  productName  String      @map("product_name")
+  quantity     Int
+  balanceAfter Int         @map("balance_after")
+  reason       StockReason
+  refType      String?     @map("ref_type")
+  refId        String?     @map("ref_id")
+  dedupeKey    String?     @map("dedupe_key")
+  recordedBy   String?     @map("recorded_by")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Tenant-scoped so one tenant's dedupe key can never suppress another's
+  // stock change. StockService claims this key before moving the balance.
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, productId, createdAt])
+  @@map("stock_movements")
+}
+
+model Category {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@map("categories")
+}
+
+// ── Commerce (Phase M4) ──────────────────────────────────────────────────────
+model Order {
+  id                 String      @id @db.Uuid
+  tenantId           String      @map("tenant_id") @db.Uuid
+  // Mongo `_id` of the legacy order, for the strangler migration bridge.
+  legacyId           String?     @unique @map("legacy_id")
+  orderNumber        String      @map("order_number")
+  // Client-generated idempotency key (offline/manual sync). Multiple NULLs are
+  // allowed by PostgreSQL, so the composite unique below stays partial in effect.
+  clientRef          String?     @map("client_ref")
+  customerPhone      String      @default("") @map("customer_phone")
+  customerName       String      @default("Customer") @map("customer_name")
+  customerEmail      String      @default("") @map("customer_email")
+  deliveryLocation   String      @default("") @map("delivery_location")
+  deliveryPhone      String      @default("") @map("delivery_phone")
+  source             OrderSource @default(whatsapp)
+  // Display label only (mirrors Express). Intentionally NOT a user FK so orders
+  // do not couple to the unresolved Mongo-ObjectId/UUID identity space.
+  recordedBy         String      @default("") @map("recorded_by")
+  total              Decimal     @db.Decimal(14, 2)
+  originalTotal      Decimal?    @map("original_total") @db.Decimal(14, 2)
+  offeredTotal       Decimal?    @map("offered_total") @db.Decimal(14, 2)
+  currency           String      @default("TZS") @db.Char(3)
+  status             OrderStatus @default(PENDING)
+  adminNote          String      @default("") @map("admin_note")
+  rejectionReason    String      @default("") @map("rejection_reason")
+  paymentMethod      String      @default("") @map("payment_method")
+  paymentReference   String      @default("") @map("payment_reference")
+  paymentProofPath   String?     @map("payment_proof_path")
+  paymentConfirmedAt DateTime?   @map("payment_confirmed_at")
+  deliveryNote       String      @default("") @map("delivery_note")
+  deliveredAt        DateTime?   @map("delivered_at")
+  version            Int         @default(0)
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+  deletedAt          DateTime?   @map("deleted_at")
+  deletedBy          String?     @map("deleted_by") @db.Uuid
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+  payments      Payment[]
+  refunds       Refund[]
+  receipts      Receipt[]
+
+  @@unique([tenantId, orderNumber])
+  @@unique([tenantId, clientRef])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, customerPhone, createdAt])
+  @@index([tenantId, deletedAt, id])
+  @@index([tenantId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String   @id @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  orderId         String   @map("order_id") @db.Uuid
+  productId       String?  @map("product_id") @db.Uuid
+  // Mongo ObjectId of the legacy product, for the strangler migration bridge.
+  legacyProductId String?  @map("legacy_product_id")
+  productName     String   @map("product_name")
+  price           Decimal  @db.Decimal(14, 2)
+  currency        String   @default("TZS") @db.Char(3)
+  quantity        Int
+  subtotal        Decimal  @db.Decimal(14, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, orderId])
+  @@index([tenantId, productId])
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id        String      @id @db.Uuid
+  tenantId  String      @map("tenant_id") @db.Uuid
+  orderId   String      @map("order_id") @db.Uuid
+  status    OrderStatus
+  note      String      @default("")
+  changedBy String?     @map("changed_by")
+  changedAt DateTime    @default(now()) @map("changed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, orderId, changedAt])
+  @@map("order_status_history")
+}
+
+// Per-tenant, per-day sequence backing race-free order numbers (ORD-YYYYMMDD-NNNN).
+model OrderCounter {
+  tenantId String @map("tenant_id") @db.Uuid
+  day      String @db.Char(8)
+  seq      Int    @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, day])
+  @@map("order_counters")
+}
+
+// ── Finance (Phase M5) ───────────────────────────────────────────────────────
+// Immutable payment record. Financial fields are frozen after creation (enforced
+// by a DB trigger in 0006_finance); only status/failure/proof/raw/confirmedAt
+// may transition.
+model Payment {
+  id             String          @id @db.Uuid
+  tenantId       String          @map("tenant_id") @db.Uuid
+  legacyId       String?         @unique @map("legacy_id")
+  orderId        String?         @map("order_id") @db.Uuid
+  provider       PaymentProvider @default(manual)
+  method         String          @default("manual")
+  // Globally unique so provider webhooks can resolve a payment with no tenant
+  // context. Multiple NULLs are allowed.
+  providerRef    String?         @unique @map("provider_ref")
+  idempotencyKey String?         @map("idempotency_key")
+  amount         Decimal         @db.Decimal(14, 2)
+  currency       String          @default("TZS") @db.Char(3)
+  phone          String          @default("")
+  status         PaymentStatus   @default(initiated)
+  failureReason  String          @default("") @map("failure_reason")
+  proofPath      String?         @map("proof_path")
+  raw            Json            @default("{}")
+  initiatedBy    String          @default("") @map("initiated_by")
+  confirmedAt    DateTime?       @map("confirmed_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order    Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  attempts PaymentAttempt[]
+  refunds  Refund[]
+  receipts Receipt[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, orderId, createdAt])
+  @@map("payments")
+}
+
+// Append-only audit of provider interactions for a payment.
+model PaymentAttempt {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  paymentId String   @map("payment_id") @db.Uuid
+  provider  String
+  status    String
+  request   Json     @default("{}")
+  response  Json     @default("{}")
+  error     String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, paymentId, createdAt])
+  @@map("payment_attempts")
+}
+
+// Strictly append-only financial ledger. A DB trigger blocks UPDATE and DELETE.
+model LedgerEntry {
+  id          String          @id @db.Uuid
+  tenantId    String          @map("tenant_id") @db.Uuid
+  type        LedgerEntryType
+  direction   LedgerDirection
+  amount      Decimal         @db.Decimal(14, 2)
+  currency    String          @default("TZS") @db.Char(3)
+  refType     String          @default("") @map("ref_type")
+  refId       String          @default("") @map("ref_id")
+  // Idempotency key; unique per tenant when present.
+  dedupeKey   String?         @map("dedupe_key")
+  description String          @default("")
+  meta        Json            @default("{}")
+  recordedBy  String          @default("") @map("recorded_by")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, type, createdAt])
+  @@index([tenantId, refType, refId])
+  @@map("ledger_entries")
+}
+
+model Refund {
+  id             String       @id @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  paymentId      String       @map("payment_id") @db.Uuid
+  orderId        String?      @map("order_id") @db.Uuid
+  amount         Decimal      @db.Decimal(14, 2)
+  currency       String       @default("TZS") @db.Char(3)
+  reason         String       @default("")
+  status         RefundStatus @default(succeeded)
+  providerRef    String?      @map("provider_ref")
+  idempotencyKey String?      @map("idempotency_key")
+  recordedBy     String       @default("") @map("recorded_by")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, paymentId, createdAt])
+  @@map("refunds")
+}
+
+// ── Double-entry journal (Phase M11) ─────────────────────────────────────────
+// A balanced double-entry layer written alongside the append-only single-entry
+// `ledger_entries` cash book. Every JournalEntry has >=2 lines whose debits and
+// credits sum to the same amount (enforced in the service and verifiable via
+// LedgerService.reconcile). Accounts are strings: cash, revenue, refunds,
+// adjustments. Both tables are append-only and tenant-scoped.
+model JournalEntry {
+  id          String   @id @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  refType     String   @default("") @map("ref_type")
+  refId       String   @default("") @map("ref_id")
+  dedupeKey   String?  @map("dedupe_key")
+  description String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  lines  JournalLine[]
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, refType, refId])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id        String          @id @db.Uuid
+  tenantId  String          @map("tenant_id") @db.Uuid
+  journalId String          @map("journal_id") @db.Uuid
+  account   String
+  direction LedgerDirection
+  amount    Decimal         @db.Decimal(14, 2)
+  currency  String          @default("TZS") @db.Char(3)
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  journal JournalEntry @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, journalId])
+  @@index([tenantId, account, createdAt])
+  @@map("journal_lines")
+}
+
+// ── Identity bridge (M2 gate C4) ─────────────────────────────────────────────
+// Maps a legacy external id (Mongo ObjectId for a user/staff, or a tenant
+// business slug / ObjectId) to a platform UUID. `(provider, kind, externalId)`
+// is unique; a row is either a user/staff mapping (userId set) or a tenant
+// mapping (tenantId set).
+model IdentityAlias {
+  id         String            @id @db.Uuid
+  userId     String?           @map("user_id") @db.Uuid
+  tenantId   String?           @map("tenant_id") @db.Uuid
+  kind       IdentityAliasKind
+  provider   String            @default("legacy_mongo")
+  externalId String            @map("external_id")
+  note       String            @default("")
+  createdBy  String?           @map("created_by")
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, kind, externalId])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("identity_aliases")
+}
+
+// ── Notifications & Receipts (Phase M6) ─────────────────────────────────────
+// Tenant-scoped in-app notifications created by the outbox consumers.
+model Notification {
+  id        String               @id @db.Uuid
+  tenantId  String               @map("tenant_id") @db.Uuid
+  type      String
+  title     String
+  message   String
+  data      Json                 @default("{}")
+  priority  NotificationPriority @default(normal)
+  read      Boolean              @default(false)
+  readAt    DateTime?            @map("read_at")
+  // Idempotency: one notification per (tenant, dedupeKey).
+  dedupeKey String?              @map("dedupe_key")
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  deletedAt DateTime?            @map("deleted_at")
+  deletedBy String?              @map("deleted_by") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, read, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, deletedAt, id])
+  @@map("notifications")
+}
+
+// Structured receipt for an order and/or payment. `data` holds the immutable
+// rendered payload; `storageKey` is reserved for a future generated PDF/object.
+model Receipt {
+  id            String      @id @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  type          ReceiptType
+  orderId       String?     @map("order_id") @db.Uuid
+  paymentId     String?     @map("payment_id") @db.Uuid
+  receiptNumber String      @map("receipt_number")
+  status        String      @default("issued")
+  currency      String      @default("TZS") @db.Char(3)
+  amount        Decimal     @db.Decimal(14, 2)
+  data          Json        @default("{}")
+  storageKey    String?     @map("storage_key")
+  dedupeKey     String?     @map("dedupe_key")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, receiptNumber])
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, orderId])
+  @@index([tenantId, paymentId])
+  @@map("receipts")
+}
+
+// ── Messaging (Phase M7) ─────────────────────────────────────────────────────
+// Per-tenant Meta WhatsApp Cloud API account. Secrets are AES-256-GCM encrypted.
+model WhatsAppAccount {
+  id                 String                @id @db.Uuid
+  tenantId           String                @unique @map("tenant_id") @db.Uuid
+  provider           String                @default("meta")
+  // Meta phone_number_id is globally unique and is the webhook routing key.
+  phoneNumberId      String?               @unique @map("phone_number_id")
+  wabaId             String                @default("") @map("waba_id")
+  displayPhoneNumber String                @default("") @map("display_phone_number")
+  accessTokenEnc     String                @default("") @map("access_token_enc")
+  verifyTokenEnc     String                @default("") @map("verify_token_enc")
+  status             WhatsAppAccountStatus @default(pending)
+  // Which system runs the conversation flow for this tenant (M8).
+  flowMode           WhatsAppFlowMode      @default(off) @map("flow_mode")
+  // When paused, the NestJS flow records messages but does not auto-reply.
+  botPaused          Boolean               @default(false) @map("bot_paused")
+  qualityRating      String                @default("") @map("quality_rating")
+  lastInboundAt      DateTime?             @map("last_inbound_at")
+  lastError          String                @default("") @map("last_error")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([status])
+  @@map("whatsapp_accounts")
+}
+
+model WhatsAppTemplate {
+  id         String   @id @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  name       String
+  language   String   @default("en_US")
+  category   String   @default("")
+  status     String   @default("")
+  components Json     @default("[]")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name, language])
+  @@index([tenantId])
+  @@map("whatsapp_templates")
+}
+
+model WhatsAppContact {
+  id            String    @id @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  phone         String
+  jid           String    @default("")
+  name          String    @default("")
+  email         String    @default("")
+  messageCount  Int       @default(0) @map("message_count")
+  lastMessageAt DateTime? @map("last_message_at")
+  lastMessage   String    @default("") @map("last_message")
+  optIn         Boolean   @default(true) @map("opt_in")
+  consentStatus String    @default("granted") @map("consent_status")
+  // PDPA (Tanzania Personal Data Protection Act 2022) consent audit trail.
+  consentAt     DateTime? @map("consent_at")
+  consentSource String    @default("") @map("consent_source")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([tenantId, phone])
+  // Ordered to cover the compound keyset cursor (lastMessageAt DESC, id DESC).
+  @@index([tenantId, lastMessageAt, id])
+  @@map("whatsapp_contacts")
+}
+
+// Inbound + outbound message history. Outbound rows double as the durable send
+// queue (status `queued` → `sending` → `sent`/`failed`).
+model Message {
+  id                String           @id @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  accountId         String?          @map("account_id") @db.Uuid
+  contactId         String?          @map("contact_id") @db.Uuid
+  direction         MessageDirection
+  contactPhone      String           @map("contact_phone")
+  messageType       String           @default("text") @map("message_type")
+  text              String           @default("")
+  templateName      String?          @map("template_name")
+  mediaId           String?          @map("media_id")
+  mediaMimeType     String?          @map("media_mime_type")
+  providerMessageId String?          @map("provider_message_id")
+  status            MessageStatus    @default(queued)
+  errorCode         String?          @map("error_code")
+  errorMessage      String?          @map("error_message")
+  attempts          Int              @default(0)
+  availableAt       DateTime         @default(now()) @map("available_at")
+  idempotencyKey    String?          @map("idempotency_key")
+  raw               Json             @default("{}")
+  sentAt            DateTime?        @map("sent_at")
+  statusUpdatedAt   DateTime?        @map("status_updated_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account WhatsAppAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  contact WhatsAppContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, contactPhone, createdAt])
+  @@index([tenantId, providerMessageId])
+  @@index([tenantId, status, availableAt])
+  @@index([tenantId, createdAt])
+  @@map("messages")
+}
+
+// Dedupe/audit ledger for inbound provider webhooks. Deliberately has no RLS:
+// it is written before/while a tenant is resolved and read by the system.
+model WebhookEvent {
+  id          String    @id @db.Uuid
+  provider    String    @default("meta")
+  eventId     String    @unique @map("event_id")
+  tenantId    String?   @map("tenant_id") @db.Uuid
+  type        String    @default("unknown")
+  payload     Json      @default("{}")
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([provider, createdAt])
+  @@map("webhook_events")
+}
+
+// ── Conversation state (Phase M8) ───────────────────────────────────────────
+// One row per (tenant, contact phone). A simple, explicit state machine: `step`
+// plus a small `context` bag and `cart`. Mirrors the legacy Session model.
+model Conversation {
+  id             String    @id @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  contactPhone   String    @map("contact_phone")
+  step           String    @default("LANGUAGE_SELECT")
+  language       String    @default("")
+  cart           Json      @default("[]")
+  context        Json      @default("{}")
+  lastInboundAt  DateTime? @map("last_inbound_at")
+  lastOutboundAt DateTime? @map("last_outbound_at")
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, contactPhone])
+  @@index([tenantId, lastActivityAt])
+  @@map("conversations")
+}
+
+// Append-only trace of every processed inbound message and the flow decision.
+// Powers shadow-mode parity review and auditing.
+model FlowTrace {
+  id             String   @id @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  conversationId String?  @map("conversation_id") @db.Uuid
+  contactPhone   String   @map("contact_phone")
+  mode           String
+  admin          Boolean  @default(false)
+  input          String
+  stepFrom       String   @map("step_from")
+  stepTo         String   @map("step_to")
+  replies        Json     @default("[]")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, contactPhone, createdAt])
+  @@map("flow_traces")
+}
+
+// ── Privacy / data-subject rights (PDPA, Phase M13) ──────────────────────────
+// Append-only record of every data export, erasure and consent decision, so a
+// controller can demonstrate compliance and an operator can see what was done.
+model PrivacyRequest {
+  id          String    @id @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  kind        String // export | erasure | consent_grant | consent_withdraw
+  subjectType String    @map("subject_type") // contact | customer | user
+  subjectRef  String    @map("subject_ref") // phone, email or user id
+  status      String    @default("completed")
+  requestedBy String    @map("requested_by")
+  detail      Json      @default("{}")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, subjectRef, createdAt])
+  @@map("privacy_requests")
+}

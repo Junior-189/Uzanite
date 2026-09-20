@@ -1,0 +1,36 @@
+{
+  "generatedAt": "2026-09-11T14:01:59.970Z",
+  "strict": true,
+  "mongo": {
+    "tenantUsers": 2,
+    "allUsers": 3,
+    "staffs": 1,
+    "businesses": 1
+  },
+  "postgres": {
+    "tenants": 0,
+    "users": 0,
+    "memberships": 0,
+    "subscriptions": 0
+  },
+  "quarantine": {
+    "users": 1,
+    "memberships": 1,
+    "total": 3
+  },
+  "checks": [
+    {
+      "name": "users",
+      "actual": 0,
+      "expected": 2,
+      "pass": false
+    },
+    {
+      "name": "memberships",
+      "actual": 0,
+      "expected": 2,
+      "pass": false
+    }
+  ],
+  "pass": false
+}

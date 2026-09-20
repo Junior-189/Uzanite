@@ -1,0 +1,32 @@
+FROM node:20-bookworm-slim AS build
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN corepack enable
+WORKDIR /app
+# Copy the full workspace manifest shape so `--frozen-lockfile` validates.
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/worker ./apps/worker
+# The worker shares the API's Prisma schema. The API package.json keeps the
+# workspace importers aligned with the lockfile; the schema is what matters here.
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/api/prisma ./apps/api/prisma
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @uzanite/contracts build
+RUN pnpm --filter @uzanite/messaging build
+# Generate the Prisma client into the WORKER's dependency tree (the runtime
+# requires @uzanite/worker's @prisma/client), using the shared schema.
+RUN mkdir -p apps/worker/prisma && cp apps/api/prisma/schema.prisma apps/worker/prisma/schema.prisma \
+ && pnpm --filter @uzanite/worker exec prisma generate
+RUN pnpm --filter @uzanite/worker build
+
+FROM node:20-bookworm-slim AS runtime
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN corepack enable
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app /app
+USER node
+WORKDIR /app/apps/worker
+CMD ["node", "dist/main.js"]

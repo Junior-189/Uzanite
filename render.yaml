@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: uzer
+    runtime: node
+    plan: free
+    buildCommand: npm install && cd client && npm install && npm run build
+    startCommand: node server.js
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: SESSION_DIR
+        value: /var/data/sessions
+      - key: UPLOAD_DIR
+        value: /var/data/sessions/uploads
+    healthCheckPath: /health
+    autoDeploy: true
+    disks:
+      - name: sessions
+        mountPath: /var/data/sessions
+        sizeGB: 2

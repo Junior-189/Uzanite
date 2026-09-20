@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">UZANITE</string>
+    <string name="title_activity_main">UZANITE</string>
+    <string name="package_name">com.uzer.app</string>
+    <string name="custom_url_scheme">com.uzer.app</string>
+</resources>

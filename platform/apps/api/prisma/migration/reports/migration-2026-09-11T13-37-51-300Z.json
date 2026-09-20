@@ -1,0 +1,48 @@
+{
+  "startedAt": "2026-09-11T13:37:51.205Z",
+  "finishedAt": "2026-09-11T13:37:51.300Z",
+  "counts": {
+    "tenants": 2,
+    "users": 2,
+    "memberships": 2,
+    "subscriptions": 2,
+    "featureFlags": 1
+  },
+  "quarantined": [
+    {
+      "entity": "user",
+      "legacyId": "6aa404126cb8afb205d0280a",
+      "reason": "missing/invalid email",
+      "raw": {
+        "_id": "6aa404126cb8afb205d0280a",
+        "name": "No Email User",
+        "role": "tenant",
+        "businessId": "biz_legacy1"
+      }
+    },
+    {
+      "entity": "membership",
+      "legacyId": "6aa404126cb8afb205d0280a",
+      "reason": "unmapped tenant or user",
+      "raw": {
+        "_id": "6aa404126cb8afb205d0280a",
+        "name": "No Email User",
+        "role": "tenant",
+        "businessId": "biz_legacy1"
+      }
+    },
+    {
+      "entity": "featureFlag",
+      "legacyId": "6aa404126cb8afb205d0280e",
+      "reason": "tenant-scoped override deferred",
+      "raw": {
+        "_id": "6aa404126cb8afb205d0280e",
+        "scope": "tenant",
+        "tenantId": "6aa404126cb8afb205d02808",
+        "key": "broadcast",
+        "enabled": false,
+        "message": "off"
+      }
+    }
+  ]
+}

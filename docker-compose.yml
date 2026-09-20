@@ -1,0 +1,54 @@
+# Local / single-host deployment. Create a .env file (see .env.example) first.
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+  app:
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/uzanite
+      REDIS_URL: redis://redis:6379
+      RUN_WORKER_IN_PROCESS: "false"
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - private-data:/app/private_uploads
+    depends_on:
+      - mongo
+      - redis
+
+  worker:
+    build: .
+    init: true
+    restart: unless-stopped
+    command: ["node", "src/worker.js"]
+    env_file: .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/uzanite
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - private-data:/app/private_uploads
+    depends_on:
+      - mongo
+      - redis
+
+volumes:
+  mongo-data:
+  redis-data:
+  private-data:
