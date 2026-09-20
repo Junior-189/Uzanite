@@ -4,11 +4,14 @@ import { Request } from 'express';
 import {
   changePasswordSchema,
   forgotPasswordSchema,
+  loginMfaSchema,
   loginSchema,
   logoutSchema,
   refreshSchema,
   registerSchema,
   resetPasswordSchema,
+  totpCodeSchema,
+  totpDisableSchema,
 } from '@uzanite/contracts';
 import { Public } from '../../decorators/public.decorator';
 import { CurrentUser } from '../../decorators/principal.decorator';
@@ -39,6 +42,13 @@ export class AuthController {
   @Post('login')
   login(@Body(new ZodValidationPipe(loginSchema)) body: unknown, @Req() req: Request) {
     return this.auth.login(body as never, metaOf(req));
+  }
+
+  @Public()
+  @HttpCode(200)
+  @Post('login/2fa')
+  loginMfa(@Body(new ZodValidationPipe(loginMfaSchema)) body: { mfaToken: string; code: string }, @Req() req: Request) {
+    return this.auth.loginMfa(body.mfaToken, body.code, metaOf(req));
   }
 
   @Public()
@@ -82,5 +92,27 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() principal: Principal) {
     return this.auth.me(principal.userId);
+  }
+
+  // ── TOTP two-factor management (authenticated) ───────────────────────────────
+  @HttpCode(200)
+  @Post('totp/enroll')
+  totpEnroll(@CurrentUser() principal: Principal) {
+    return this.auth.beginTotp(principal.userId);
+  }
+
+  @HttpCode(200)
+  @Post('totp/confirm')
+  totpConfirm(@CurrentUser() principal: Principal, @Body(new ZodValidationPipe(totpCodeSchema)) body: { code: string }) {
+    return this.auth.confirmTotp(principal.userId, body.code);
+  }
+
+  @HttpCode(200)
+  @Post('totp/disable')
+  totpDisable(
+    @CurrentUser() principal: Principal,
+    @Body(new ZodValidationPipe(totpDisableSchema)) body: { password: string; code: string }
+  ) {
+    return this.auth.disableTotp(principal.userId, body.password, body.code);
   }
 }

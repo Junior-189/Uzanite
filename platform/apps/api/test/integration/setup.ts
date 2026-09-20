@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { RedisService } from '../../src/redis/redis.service';
 import { TokenService } from '../../src/security/token.service';
+import { JwtKeyService } from '../../src/security/jwt-keys.service';
+import { TotpService } from '../../src/security/totp.service';
 import { LockoutService } from '../../src/security/lockout.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
 import { AuthService } from '../../src/modules/identity/auth.service';
@@ -62,10 +64,12 @@ export async function createHarness(): Promise<Harness> {
   await prisma.onModuleInit();
   const redis = new RedisService(config);
   const jwt = new JwtService({ secret: process.env.JWT_SECRET as string });
-  const tokens = new TokenService(jwt, prisma, config);
+  const keys = new JwtKeyService(config, jwt);
+  const tokens = new TokenService(jwt, prisma, config, keys);
+  const totp = new TotpService(prisma);
   const lockout = new LockoutService(redis);
   const outbox = new OutboxService(prisma);
-  const auth = new AuthService(prisma, tokens, lockout, outbox, config);
+  const auth = new AuthService(prisma, tokens, lockout, outbox, config, totp);
 
   // Shared infrastructure, built once here so specs never have to know each
   // service's constructor signature.

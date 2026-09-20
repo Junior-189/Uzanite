@@ -6,9 +6,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { JwtKeyService } from '../security/jwt-keys.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { IdentityResolverService } from '../modules/identity/identity-resolver.service';
 import { runAsSystem, setPrincipal, setTenant, Principal } from '../context/tenant-context';
@@ -30,7 +30,7 @@ interface AccessTokenPayload {
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
-    private readonly jwt: JwtService,
+    private readonly keys: JwtKeyService,
     private readonly prisma: PrismaService,
     private readonly reflector: Reflector,
     private readonly identity: IdentityResolverService
@@ -50,7 +50,7 @@ export class JwtAuthGuard implements CanActivate {
 
     let payload: AccessTokenPayload;
     try {
-      payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
+      payload = await this.keys.verify<AccessTokenPayload>(token);
     } catch {
       throw new UnauthorizedException('Not authorized, token failed');
     }

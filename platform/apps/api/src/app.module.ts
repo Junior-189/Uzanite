@@ -10,6 +10,7 @@ import { validateEnv } from './config/env';
 import { JWT_ALGORITHM, JWT_AUDIENCE, JWT_ISSUER } from './security/jwt.constants';
 import { getCorrelation } from './context/tenant-context';
 import { ObservabilityModule } from './observability/observability.module';
+import { SecurityModule } from './security/security.module';
 import { AdminAccessAuditInterceptor } from './interceptors/admin-access-audit.interceptor';
 import { ApiVersionInterceptor } from './versioning/api-version.interceptor';
 import { CacheModule } from './cache/cache.module';
@@ -103,6 +104,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
     }),
     EventEmitterModule.forRoot(),
     ObservabilityModule,
+    SecurityModule,
     CacheModule,
     PrismaModule,
     RedisModule,

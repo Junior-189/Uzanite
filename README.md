@@ -251,7 +251,7 @@ Conversation rollout is controlled per tenant via `flow_mode` (`off` = legacy ow
 
 ## Security
 
-- **Authentication:** JWT access tokens + rotating refresh tokens with reuse detection and token-version revocation; bcrypt password hashing (**argon2id + admin TOTP 2FA are on the roadmap** — see the alignment doc).
+- **Authentication:** JWT access tokens + rotating refresh tokens with reuse detection and token-version revocation; **argon2id** password hashing with transparent upgrade of legacy hashes; **TOTP two-factor** (enforced for platform admins) with single-use recovery codes; **`kid`-based JWT key rotation** (`JWT_KEYS`).
 - **Tenant isolation:** application-level scoping (Prisma tenant extension) **plus** PostgreSQL **FORCE row-level security** with a non-owner, non-bypass DB role and a boot-time assertion.
 - **Input safety:** Zod validation everywhere, parameterised SQL only (a CI guard forbids unsafe raw SQL), regex inputs escaped (ReDoS), rate limiting on auth, APIs, webhooks, and metrics.
 - **Secrets & transport:** AES-256-GCM encryption for provider tokens, HMAC webhook verification, Helmet-equivalent security headers, strict CORS allow-list, placeholder-secret rejection at boot.

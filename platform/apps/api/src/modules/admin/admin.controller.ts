@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Put, Query, Req } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import {
@@ -10,6 +10,7 @@ import {
 } from '@uzanite/contracts';
 import { CurrentUser } from '../../decorators/principal.decorator';
 import { RateLimit } from '../../decorators/rate-limit.decorator';
+import { AdminMfaGuard } from '../../guards/admin-mfa.guard';
 import { Principal } from '../../context/tenant-context';
 import { ZodValidationPipe } from '../../pipes/zod-validation.pipe';
 import { AdminService } from './admin.service';
@@ -20,6 +21,7 @@ function assertPlatformAdmin(principal: Principal): void {
 
 @ApiTags('admin')
 @ApiBearerAuth()
+@UseGuards(AdminMfaGuard)
 @RateLimit({ limit: 60, windowSeconds: 60, keyPrefix: 'admin', scope: 'user' })
 @Controller('admin')
 export class AdminController {

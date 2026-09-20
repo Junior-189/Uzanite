@@ -11,7 +11,8 @@ import { ChangePasswordInput, LoginInput, RegisterInput } from '@uzanite/contrac
 import { PrismaService } from '../../prisma/prisma.service';
 import { TokenService } from '../../security/token.service';
 import { LockoutService } from '../../security/lockout.service';
-import { hashPassword, assertPasswordPolicy, verifyPassword } from '../../security/password';
+import { TotpService } from '../../security/totp.service';
+import { hashPassword, assertPasswordPolicy, verifyPasswordDetailed } from '../../security/password';
 import { newId } from '../../ids/id';
 import { randomToken, sha256 } from '../../crypto/crypto';
 import { runAsSystem } from '../../context/tenant-context';
@@ -29,7 +30,8 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly lockout: LockoutService,
     private readonly outbox: OutboxService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly totp: TotpService
   ) {}
 
   private async recordLogin(
@@ -87,6 +89,55 @@ export class AuthService {
     };
   }
 
+  // Issues an authenticated session (access + refresh token) for a user.
+  private async issueSession(
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      platformRole: string | null;
+      status: string;
+      mustChangePassword: boolean;
+      tokenVersion: number;
+    },
+    meta: RequestMeta
+  ) {
+    const membership = await runAsSystem(() =>
+      this.prisma.db.membership.findFirst({
+        where: { userId: user.id, status: 'active' },
+        orderBy: { createdAt: 'asc' },
+      })
+    );
+
+    const pending = user.status === 'pending';
+    const accessToken = await this.tokens.signAccess({
+      userId: user.id,
+      tenantId: membership?.tenantId ?? null,
+      membershipId: membership?.id ?? null,
+      role: membership?.role ?? null,
+      permissions: membership?.permissions ?? [],
+      tokenVersion: user.tokenVersion,
+    });
+    const refreshToken = await this.tokens.issueRefresh(user.id, meta);
+
+    return {
+      success: true as const,
+      pending,
+      token: accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        platformRole: user.platformRole,
+        tenantId: membership?.tenantId ?? null,
+        role: membership?.role ?? null,
+        status: user.status,
+        mustChangePassword: user.mustChangePassword,
+      },
+    };
+  }
+
   async login(input: LoginInput, meta: RequestMeta) {
     const lock = await this.lockout.check(input.email);
     if (lock.locked) {
@@ -109,53 +160,70 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const ok = await verifyPassword(input.password, user.passwordHash);
-    if (!ok) {
+    const verification = await verifyPasswordDetailed(input.password, user.passwordHash);
+    if (!verification.valid) {
       await this.recordLogin(input.email, user.id, 'failed', 'Wrong password', meta);
       await this.lockout.recordFailure(input.email);
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // Transparently upgrade legacy bcrypt (or outdated argon2) hashes to argon2id.
+    if (verification.needsRehash) {
+      const passwordHash = await hashPassword(input.password);
+      await this.prisma.db.user.update({ where: { id: user.id }, data: { passwordHash } });
+    }
+
     if (user.status === 'rejected') throw new ForbiddenException('Your account has been rejected. Contact support.');
     if (user.status === 'suspended') throw new ForbiddenException('Your account has been suspended. Contact support.');
 
-    const membership = await runAsSystem(() =>
-      this.prisma.db.membership.findFirst({
-        where: { userId: user.id, status: 'active' },
-        orderBy: { createdAt: 'asc' },
-      })
-    );
-
-    const pending = user.status === 'pending';
-    const accessToken = await this.tokens.signAccess({
-      userId: user.id,
-      tenantId: membership?.tenantId ?? null,
-      membershipId: membership?.id ?? null,
-      role: membership?.role ?? null,
-      permissions: membership?.permissions ?? [],
-      tokenVersion: user.tokenVersion,
-    });
-    const refreshToken = await this.tokens.issueRefresh(user.id, meta);
+    // Two-factor: hand back a short-lived challenge instead of a session.
+    if (user.totpEnabledAt) {
+      const mfaToken = await this.tokens.signMfaChallenge(user.id, user.tokenVersion);
+      await this.recordLogin(input.email, user.id, 'mfa_required', 'Awaiting 2FA code', meta);
+      return { success: false as const, mfaRequired: true as const, mfaToken };
+    }
 
     await this.lockout.clear(input.email);
+    const pending = user.status === 'pending';
     await this.recordLogin(input.email, user.id, pending ? 'pending' : 'success', pending ? 'Account pending approval' : '', meta);
+    return this.issueSession(user, meta);
+  }
 
-    return {
-      success: true,
-      pending,
-      token: accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        platformRole: user.platformRole,
-        tenantId: membership?.tenantId ?? null,
-        role: membership?.role ?? null,
-        status: user.status,
-        mustChangePassword: user.mustChangePassword,
-      },
-    };
+  // Second step of the two-factor login: exchange the mfa challenge + code.
+  async loginMfa(mfaToken: string, code: string, meta: RequestMeta) {
+    const challenge = await this.tokens.verifyMfaChallenge(mfaToken);
+    if (!challenge) throw new UnauthorizedException('Invalid or expired two-factor challenge');
+
+    const user = await this.prisma.db.user.findFirst({ where: { id: challenge.userId, deletedAt: null } });
+    if (!user) throw new UnauthorizedException('Account not found');
+    if (user.status === 'suspended' || user.status === 'rejected') throw new ForbiddenException('Account is not active');
+    if (user.tokenVersion !== challenge.tokenVersion) throw new UnauthorizedException('Session expired. Please sign in again.');
+
+    if (!(await this.totp.verifyForUser(user.id, code))) {
+      await this.recordLogin(user.email, user.id, 'failed', 'Invalid 2FA code', meta);
+      throw new UnauthorizedException('Invalid authentication code');
+    }
+
+    await this.recordLogin(user.email, user.id, user.status === 'pending' ? 'pending' : 'success', '2FA verified', meta);
+    return this.issueSession(user, meta);
+  }
+
+  // ── TOTP two-factor management ───────────────────────────────────────────────
+  beginTotp(userId: string) {
+    return this.totp.beginEnrollment(userId);
+  }
+
+  confirmTotp(userId: string, code: string) {
+    return this.totp.confirmEnrollment(userId, code);
+  }
+
+  async disableTotp(userId: string, password: string, code: string) {
+    const user = await this.prisma.db.user.findFirst({ where: { id: userId, deletedAt: null } });
+    if (!user) throw new UnauthorizedException('User not found');
+    const verification = await verifyPasswordDetailed(password, user.passwordHash);
+    if (!verification.valid) throw new UnauthorizedException('Password is incorrect');
+    if (!(await this.totp.verifyForUser(userId, code))) throw new UnauthorizedException('Invalid authentication code');
+    return this.totp.disable(userId);
   }
 
   async refresh(raw: string, meta: RequestMeta) {
@@ -195,7 +263,7 @@ export class AuthService {
     const user = await this.prisma.db.user.findFirst({ where: { id: userId, deletedAt: null } });
     if (!user) throw new UnauthorizedException('User not found');
 
-    const ok = await verifyPassword(input.currentPassword, user.passwordHash);
+    const ok = (await verifyPasswordDetailed(input.currentPassword, user.passwordHash)).valid;
     if (!ok) throw new UnauthorizedException('Current password is incorrect');
 
     const passwordHash = await hashPassword(input.newPassword);
@@ -223,7 +291,17 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.prisma.db.user.findFirst({
       where: { id: userId, deletedAt: null },
-      select: { id: true, name: true, email: true, phone: true, platformRole: true, status: true, mustChangePassword: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        platformRole: true,
+        status: true,
+        mustChangePassword: true,
+        createdAt: true,
+        totpEnabledAt: true,
+      },
     });
     if (!user) throw new UnauthorizedException('User not found');
     const membership = await runAsSystem(() =>
@@ -233,10 +311,12 @@ export class AuthService {
         include: { tenant: { select: { id: true, slug: true, name: true, status: true } } },
       })
     );
+    const { totpEnabledAt, ...rest } = user;
     return {
       success: true,
       user: {
-        ...user,
+        ...rest,
+        totpEnabled: !!totpEnabledAt,
         tenantId: membership?.tenantId ?? null,
         role: membership?.role ?? null,
         permissions: membership?.permissions ?? [],

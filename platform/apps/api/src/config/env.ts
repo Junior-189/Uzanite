@@ -37,6 +37,12 @@ export const envSchema = z
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
     JWT_ACCESS_TTL: z.string().default('15m'),
     JWT_REFRESH_TTL_DAYS: z.coerce.number().int().default(30),
+    // Optional key set for `kid`-based rotation: JSON array of
+    // [{ "kid": "...", "secret": "..." }]. `JWT_ACTIVE_KID` selects the signing
+    // key; tokens are verified against their header `kid`. Falls back to
+    // JWT_SECRET (kid "default") when unset.
+    JWT_KEYS: z.string().optional().default(''),
+    JWT_ACTIVE_KID: z.string().optional().default(''),
     ENCRYPTION_KEY: z.string().optional().default(''),
     APP_URL: z.string().default('http://localhost:4000'),
     PUBLIC_APP_URL: z.string().optional().default(''),

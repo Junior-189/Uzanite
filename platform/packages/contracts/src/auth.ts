@@ -30,7 +30,22 @@ export const resetPasswordSchema = z
   .object({ token: z.string().min(10), newPassword: password })
   .strict();
 
+// ── TOTP two-factor ──────────────────────────────────────────────────────────
+// Second step of login: exchange the short-lived challenge for a session.
+export const loginMfaSchema = z
+  .object({ mfaToken: z.string().min(10), code: z.string().trim().min(6).max(10) })
+  .strict();
+
+export const totpCodeSchema = z.object({ code: z.string().trim().min(6).max(10) }).strict();
+
+export const totpDisableSchema = z
+  .object({ password: z.string().min(1), code: z.string().trim().min(6).max(10) })
+  .strict();
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type LoginMfaInput = z.infer<typeof loginMfaSchema>;
+export type TotpCodeInput = z.infer<typeof totpCodeSchema>;
+export type TotpDisableInput = z.infer<typeof totpDisableSchema>;

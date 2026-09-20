@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtKeyService } from './jwt-keys.service';
 import { newId } from '../ids/id';
 import { randomToken, sha256 } from '../crypto/crypto';
 
@@ -25,7 +26,8 @@ export class TokenService {
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly keys: JwtKeyService
   ) {}
 
   private get refreshTtlMs(): number {
@@ -46,7 +48,26 @@ export class TokenService {
       tv: claims.tokenVersion,
       act: claims.impersonatedBy ?? null,
     };
-    return ttl ? this.jwt.signAsync(payload, { expiresIn: ttl }) : this.jwt.signAsync(payload);
+    return this.jwt.signAsync(payload, this.keys.signOptions(ttl));
+  }
+
+  // Short-lived challenge issued after a correct password when the account has
+  // TOTP enabled; exchanged (with a code) at POST /auth/login/2fa for real tokens.
+  signMfaChallenge(userId: string, tokenVersion: number): Promise<string> {
+    return this.jwt.signAsync(
+      { sub: userId, tv: tokenVersion, purpose: 'mfa' },
+      this.keys.signOptions('5m')
+    );
+  }
+
+  async verifyMfaChallenge(token: string): Promise<{ userId: string; tokenVersion: number } | null> {
+    try {
+      const payload = await this.keys.verify<{ sub?: string; tv?: number; purpose?: string }>(token);
+      if (payload.purpose !== 'mfa' || !payload.sub) return null;
+      return { userId: payload.sub, tokenVersion: payload.tv ?? 0 };
+    } catch {
+      return null;
+    }
   }
 
   async issueRefresh(userId: string, meta: RefreshMeta = {}): Promise<string> {

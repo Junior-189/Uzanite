@@ -17,8 +17,8 @@
 | Redis + BullMQ (queues, lockout, rate-limit) | **DONE** | Platform + legacy both use Redis-backed queues/limits |
 | Cache / rate-limit on Redis | **DONE** | `platform/apps/api/src/cache`, sliding-window limiter, `TRUST_PROXY_HOPS` |
 | Auth: access 15m + refresh rotation + revoke on suspend | **DONE** | `security/token.service.ts`, `tokenVersion`, `JwtAuthGuard` |
-| **argon2id** instead of bcryptjs | **GAP** | Both stacks use `bcryptjs` (`package.json`, `platform/apps/api/package.json`) |
-| **Admin TOTP 2FA** | **GAP** | No `otplib`/TOTP anywhere |
+| **argon2id** instead of bcryptjs | **DONE (platform)** | Platform hashes with argon2id and upgrades legacy bcrypt hashes transparently on login (`security/password.ts`); legacy app still bcryptjs until decommission |
+| **Admin TOTP 2FA** | **DONE (platform)** | `security/totp.service.ts` + `/auth/totp/*` + `/auth/login/2fa`; enforced for platform admins via `AdminMfaGuard` |
 | helmet / throttler / CORS allow-list | **DONE (equivalent)** | Platform: custom security-headers (M10) + Redis limiter + strict CORS; legacy: helmet + limiters |
 | Signed object storage (S3/R2), no public disk | **PARTIAL** | Legacy `storageService` (local/S3 signed URLs); **platform has no upload endpoint yet** |
 | **Meta Cloud API only; drop Baileys** | **PARTIAL** | Platform is Meta-only; **legacy still ships Baileys** (`src/whatsapp/{client,transport}.js`, `@whiskeysockets/baileys`) |
@@ -29,7 +29,7 @@
 | Observability: Pino + OpenTelemetry + Sentry | **PARTIAL** | Pino + Sentry-compatible Store-API + W3C trace + optional OTLP (M12); **full OTel SDK not wired** |
 | REST `/api/v1` + OpenAPI | **DONE** | `platform/apps/api/openapi.json` + `platform/scripts/api-contract-check.mjs` |
 | **Move off MongoDB** | **PARTIAL** | Postgres platform exists; **Mongo/Express still present and used by the client** |
-| argon2 / jose kid rotation / sanitize-html / Playwright e2e / Dependabot+audit | **PARTIAL** | `security.yml` (audit/secret-scan/SAST/image scan) present; argon2, jose-kid, sanitize-html, Playwright **missing** |
+| argon2 / kid rotation / sanitize-html / Playwright e2e / Dependabot+audit | **PARTIAL** | `security.yml` present; **argon2id + HS256 `kid` rotation done** (platform); sanitize-html + Playwright e2e still missing |
 | API rules: tenant from token, idempotency, transactions, server-side flags, impersonation claims | **DONE** | Platform: RLS + ALS tenant context, idempotency keys, `runAsSystem`, `@RequirePlanFeature`, `act`/`typ` impersonation + audit |
 
 ---
@@ -49,10 +49,11 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 - This alignment document.
 - README rewritten **Postgres/NestJS-first**, with Express/Mongo labelled *transitional legacy*.
 
-### Batch B — Auth hardening (Phase 0/1; additive, non-destructive)
-1. **argon2id** with transparent rehash: verify existing `bcrypt` hashes, rehash to argon2id on next successful login; keep the `passwordHash` column. Applies to the platform first (legacy second).
-2. **Admin TOTP 2FA** (`otplib`): enroll/verify endpoints, recovery codes, enforced for `platformRole` admins; audit events.
-3. **jose / key rotation (`kid`)** for JWT signing (replace the single HS256 secret with a key set).
+### Batch B — Auth hardening (Phase 0/1) — ✅ DONE, verified locally (not yet pushed)
+1. **argon2id** with transparent rehash: platform now hashes with argon2id (OWASP baseline) and upgrades legacy bcrypt/outdated-argon2 hashes on the next successful login (`security/password.ts`). Covered by unit + integration tests.
+2. **Admin TOTP 2FA** (`otplib`): two-step login (`/auth/login` → `mfaRequired` challenge → `/auth/login/2fa`), enrollment (`/auth/totp/enroll|confirm|disable`), 8 single-use recovery codes (hashed), secret AES-256-GCM encrypted. Enforced for platform admins via `AdminMfaGuard`. Migration `0016_totp_2fa`.
+3. **JWT key rotation (`kid`)**: `JwtKeyService` supports a `JWT_KEYS` key set with `JWT_ACTIVE_KID`; tokens verify against their header `kid`, so keys rotate without invalidating outstanding sessions. Retains pinned issuer/audience/HS256.
+- Verification: platform CI green — **API 180 tests / 31 files, worker 20, contracts 6**, typecheck, Prisma drift gate, build.
 
 ### Batch C — Client modernization (Phase 5)
 1. **TypeScript** migration (incremental: `allowJs`, start with `utils/`, `context/`, `db/`).
@@ -83,11 +84,10 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 
 ---
 
-## 5. Recommended next batch
+## 5. Batch status & recommended next batch
 
-**Batch B (auth hardening)** is the highest-value, lowest-risk step that directly matches the plan and does not depend on cutover:
-- argon2id (with backward-compatible rehash),
-- admin TOTP 2FA,
-- JWT key rotation (`kid`).
-
-Ask the operator to confirm Batch B before implementation; Batch D must not start until Batch E's reconciliation is green.
+- **Batch A (positioning/docs):** ✅ done.
+- **Batch B (auth hardening):** ✅ done, verified locally (argon2id, admin TOTP 2FA, JWT `kid` rotation). **Not pushed** per operator instruction.
+- **Batch C (client TypeScript + TanStack Query/RHF/Zod + PWA + Android package-id repair):** recommended next.
+- **Batch D (delete Electron/Baileys/Mongo):** destructive — only after Batch E cutover + reconciliation is green.
+- **Batch E (client cutover to `/api/v1`):** the core migration and the prerequisite for Batch D.

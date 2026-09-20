@@ -270,6 +270,11 @@ model User {
   tokenVersion       Int           @default(0) @map("token_version")
   mustChangePassword Boolean       @default(false) @map("must_change_password")
   emailVerifiedAt    DateTime?     @map("email_verified_at")
+  // TOTP two-factor auth (Phase M14). The secret is AES-256-GCM encrypted;
+  // recovery codes are stored as SHA-256 hashes and consumed on use.
+  totpSecretEnc      String?       @map("totp_secret_enc")
+  totpEnabledAt      DateTime?     @map("totp_enabled_at")
+  totpRecoveryHashes String[]      @default([]) @map("totp_recovery_hashes")
   lastLoginAt        DateTime?     @map("last_login_at")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
