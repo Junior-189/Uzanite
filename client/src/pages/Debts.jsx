@@ -70,7 +70,7 @@ export default function Debts() {
     e.preventDefault();
     if (!showPay || !payAmount) return;
     try {
-      await apiAction('debts', showPay._id || showPay.id, 'pay', { paymentAmount: Number(payAmount) });
+      await apiAction(`/debts/${showPay._id || showPay.id}/pay`, 'POST', { paymentAmount: Number(payAmount) });
       showToast(t('debts.confirmed_payment'), 'success');
       setShowPay(null); setPayAmount('');
       fetchDebts(true);
@@ -78,12 +78,12 @@ export default function Debts() {
   };
 
   const handleReminder = async (id) => {
-    try { await apiAction('debts', id, 'reminder'); showToast(t('debts.confirmed_reminder'), 'success'); } catch (err) { showToast(err.error || t('debts.failed_reminder'), 'error'); }
+    try { await apiAction(`/debts/${id}/reminder`, 'POST'); showToast(t('debts.confirmed_reminder'), 'success'); } catch (err) { showToast(err.error || t('debts.failed_reminder'), 'error'); }
   };
 
   const handleReminderAll = async () => {
     if (!confirm(t('debt.remind_all_confirm'))) return;
-    try { const res = await apiAction('debts', null, 'reminder-all'); showToast(res.message || t('debts.confirmed_reminders_sent'), 'success'); } catch (err) { showToast(err.error || t('common.failed'), 'error'); }
+    try { const res = await apiAction('/debts/reminder-all', 'POST'); showToast(res.message || t('debts.confirmed_reminders_sent'), 'success'); } catch (err) { showToast(err.error || t('common.failed'), 'error'); }
   };
 
   const handleDelete = async (id) => {

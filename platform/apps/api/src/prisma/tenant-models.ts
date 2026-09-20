@@ -41,6 +41,10 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'PrivacyRequest',
   // Tenant staff accounts (Phase M17)
   'Staff',
+  // Finance ledgers (Phase M18)
+  'Expense',
+  'Purchase',
+  'Debt',
 ]);
 
 // Models with an optional tenantId (global + per-tenant rows) are scoped

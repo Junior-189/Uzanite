@@ -227,6 +227,9 @@ model Tenant {
   conversations      Conversation[]
   flowTraces         FlowTrace[]
   staff              Staff[]
+  expenses           Expense[]
+  purchases          Purchase[]
+  debts              Debt[]
 
   privacyRequests PrivacyRequest[]
 
@@ -1143,4 +1146,81 @@ model PrivacyRequest {
   @@index([tenantId, createdAt])
   @@index([tenantId, subjectRef, createdAt])
   @@map("privacy_requests")
+}
+
+// ── Finance ledgers (Phase M18) ──────────────────────────────────────────────
+// Legacy Express Expense / Purchase / Debt models, ported so Reports and the
+// dashboard have a platform-resident source of truth.
+
+model Expense {
+  id          String   @id @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  description String
+  amount      Decimal  @db.Decimal(14, 2)
+  category    String   @default("Other")
+  recordedBy  String   @default("Owner") @map("recorded_by")
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, date])
+  @@index([tenantId, id])
+  @@map("expenses")
+}
+
+model Purchase {
+  id             String    @id @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  productId      String?   @map("product_id") @db.Uuid
+  productName    String    @map("product_name")
+  quantity       Int
+  costPerUnit    Decimal   @map("cost_per_unit") @db.Decimal(14, 2)
+  totalCost      Decimal   @map("total_cost") @db.Decimal(14, 2)
+  supplier       String    @default("")
+  recordedBy     String    @default("Owner") @map("recorded_by")
+  expiryDate     DateTime? @map("expiry_date")
+  expiryNotified String?   @map("expiry_notified")
+  date           DateTime  @default(now())
+  notes          String    @default("")
+  receiptKey     String?   @map("receipt_key")
+  clientRef      String?   @map("client_ref")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, clientRef])
+  @@index([tenantId, date])
+  @@index([tenantId, deletedAt, id])
+  @@map("purchases")
+}
+
+model Debt {
+  id            String    @id @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  customerName  String    @map("customer_name")
+  customerPhone String    @default("") @map("customer_phone")
+  amount        Decimal   @db.Decimal(14, 2)
+  paidAmount    Decimal   @default(0) @map("paid_amount") @db.Decimal(14, 2)
+  description   String    @default("")
+  dueDate       DateTime? @map("due_date")
+  status        String    @default("unpaid")
+  orderId       String?   @map("order_id") @db.Uuid
+  notes         String    @default("")
+  recordedBy    String    @default("Owner") @map("recorded_by")
+  deletedAt     DateTime? @map("deleted_at")
+  deletedBy     String?   @map("deleted_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, createdAt])
+  @@map("debts")
 }

@@ -27,6 +27,9 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Products (CRUD/restock) | `/api/products`, `/products/:id/restock` | `/api/v1/products`, `/products/:id/restock` | **READY** | routed (`/products`); responses alias `_id` + signed `imagePath`; client uploads image via `/api/v1/files`; legacy `/products/bulk` (CSV import) stays legacy-only |
 | Categories | (via products) | `/api/v1/categories` | **READY** | client does not call it directly |
 | Receipts | `/api/orders/:id/receipt`, `/orders/:id/send-receipt` | same `/api/v1/orders/:id/receipt` (PDF) + `send-receipt` | **READY** | platform renders the receipt PDF (pdfkit + QR) at the legacy path; `send-receipt` queues `receipt.send` |
+| Expenses | `/api/expenses*` | `/api/v1/expenses*` | **READY** | routed; platform module built + tested (list/totals, create, hard delete). Legacy shape: `_id`, numeric `total` |
+| Purchases | `/api/purchases*` | `/api/v1/purchases*` | **READY** | routed; platform module built + tested (idempotent by `clientRef`, multipart receipt upload + signed `receiptPath`, update, soft delete) |
+| Debts | `/api/debts*` | `/api/v1/debts*` | **READY** | routed; platform module built + tested (list/totals, create/update, partial/full payment, reminders queued via outbox, soft delete). Client `apiAction` signature bug fixed |
 | Messaging / WhatsApp | `/api/whatsapp/{status,qr,connect,disconnect,meta/credentials}` | `/api/v1/whatsapp/{account,templates,messages,conversations}` | **BLOCKED** | legacy QR/Baileys connect flow has no platform equivalent; per-tenant credentials shape differs |
 | Contacts | `/api/contacts*` | `/api/v1/contacts` | **READY** | routed; platform module built + tested (CRUD, soft delete/restore, chat history, outbox email) |
 | Chat | `/api/chat/*` | — | **BLOCKED** | not implemented |

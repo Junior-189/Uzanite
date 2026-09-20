@@ -53,6 +53,10 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/products')).toBe(true);
     expect(m.isRoutedToPlatform('/orders')).toBe(true);
     expect(m.isRoutedToPlatform('/orders/abc/receipt')).toBe(true);
+    expect(m.isRoutedToPlatform('/expenses')).toBe(true);
+    expect(m.isRoutedToPlatform('/purchases')).toBe(true);
+    expect(m.isRoutedToPlatform('/debts')).toBe(true);
+    expect(m.isRoutedToPlatform('/debts/abc/pay')).toBe(true);
     expect(m.isRoutedToPlatform('/staff')).toBe(true);
     expect(m.isRoutedToPlatform('/staff/login')).toBe(true);
     expect(m.isRoutedToPlatform('/admin/users')).toBe(true);

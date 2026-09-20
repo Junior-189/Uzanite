@@ -32,6 +32,9 @@ const DEFAULT_PLATFORM_PREFIXES = [
   '/recycle-bin',
   '/products',
   '/orders',
+  '/expenses',
+  '/purchases',
+  '/debts',
   '/staff',
   // Admin-users sub-paths only. `/admin/feature-flags` and
   // `/admin/activity-logs|login-attempts` remain legacy until those domains
