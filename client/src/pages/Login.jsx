@@ -5,6 +5,7 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import UzerLogo from '../components/UzerLogo';
 import { getUser as getStoredUser } from '../utils/tokenStore';
+import { resolveApiUrl } from '../utils/apiRouting';
 
 function GoogleSignIn({ onCredential, t }) {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -140,8 +141,7 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || '/api';
-      const res = await fetch(`${apiUrl}/auth/register`, {
+      const res = await fetch(resolveApiUrl('/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password }),
@@ -168,8 +168,7 @@ export default function Login() {
       return;
     }
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || '/api';
-      await fetch(`${apiUrl}/auth/forgot-password`, {
+      await fetch(resolveApiUrl('/auth/forgot-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),

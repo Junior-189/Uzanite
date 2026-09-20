@@ -165,7 +165,7 @@ npm run build                 # web build
 npm run build:mobile && npx cap sync android && npm run cap:build:debug
 ```
 
-> The client currently points at the legacy `/api`. The cutover to `/api/v1` is part of the migration plan.
+> The client still defaults to the legacy `/api`. A Strangler cutover flag (`VITE_API_V1`, default off) now routes the **auth** wave to `/api/v1` with a platform→legacy user/permission bridge and a parity harness (`platform/scripts/api-parity-check.mjs`); other domains follow once parity is green.
 
 ### 3. Legacy Express + MongoDB app (transitional)
 ```bash

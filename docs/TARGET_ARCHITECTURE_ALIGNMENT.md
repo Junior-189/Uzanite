@@ -67,10 +67,12 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 2. **Drop Baileys** (Meta-only; delete `src/whatsapp/{client,transport}.js` + dependency).
 3. **Remove the Express/Mongo app** once every domain is cut over and reconciled.
 
-### Batch E — Cutover to the target backend (the real project)
-1. Point the client at `/api/v1` for wave 1 (auth, tenants, billing, admin) behind a per-tenant flag; shadow-compare reads.
-2. Migrate commerce/catalog/finance/messaging; keep the reconciliation job green.
-3. Retire legacy routes domain by domain; then run Batch D.
+### Batch E — Cutover to the target backend (the real project) — 🔄 first increment DONE (auth wave), verified locally (not pushed)
+1. **Dual-stack client routing + auth wave:** `client/src/utils/apiRouting.ts` routes a path to `/api/v1` or `/api` based on the `VITE_API_V1` flag (**default off**). The axios client applies it per request; auth call sites use `resolveApiUrl`. Live auth flows the platform does not implement (`/auth/google`, `/auth/staff`, `/auth/theme`) are pinned to legacy.
+2. **Shape compatibility bridge:** `client/src/utils/platformBridge.ts` adapts the platform's `{platformRole, membership role, permission catalogue}` user to the legacy client shape (`role: tenant|staff|sub_admin|super_admin`, `manage_orders`-style permissions), so a flipped cutover does not lock the UI down. Unit-tested.
+3. **Parity harness:** `platform/scripts/api-parity-check.mjs` compares the same authenticated GET against both stacks and reports shape differences — the shadow-compare gate before flipping `VITE_API_V1=true`.
+4. **Not yet cut over:** tenants/billing/admin (their client call sites and platform endpoints do not match yet — e.g. `/admin/users`, `/admin/stats`, feature flags), and commerce/catalog/finance/messaging. Widen `PLATFORM_PREFIXES` one domain at a time once parity is green. Then Batch D (delete legacy/Baileys/Electron).
+- Verification: client `typecheck` ✅, `lint` ✅, `test` 24/24 ✅, `build` ✅. Cutover flag defaults off, so production (legacy) behaviour is unchanged.
 
 ### Batch F — Scale & ops (Phase 6)
 - Read replicas for reports, per-tenant send worker, PgBouncer when replicas ≥ 2, full OTel SDK, load-test gates.
@@ -91,4 +93,4 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 - **Batch B (auth hardening):** ✅ done, verified locally (argon2id, admin TOTP 2FA, JWT `kid` rotation). **Not pushed** per operator instruction.
 - **Batch C (client TypeScript foundation + TanStack Query/Zod + PWA + Android package-id repair):** ✅ foundation done, verified locally. Remaining: page-by-page TSX conversion, TanStack Query adoption per page, React Hook Form for forms, component library (shadcn/ui).
 - **Batch D (delete Electron/Baileys/Mongo):** destructive — only after Batch E cutover + reconciliation is green.
-- **Batch E (client cutover to `/api/v1`):** the core migration and the prerequisite for Batch D.
+- **Batch E (client cutover to `/api/v1`):** 🔄 first increment done — auth-wave routing flag (`VITE_API_V1`, default off) + platform→legacy user/permission bridge + parity harness; verified locally, not pushed. Remaining: cut over tenants/billing/admin and then commerce/catalog/finance/messaging. Prerequisite for Batch D.

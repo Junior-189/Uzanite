@@ -2,6 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { getT } from '../context/LangContext';
 import { translateApiMessage } from './translateApiMessage';
 import { clearSession, getAccessToken, getRefreshToken, saveSession, setAccessToken } from './tokenStore';
+import { apiBaseFor, resolveApiUrl } from './apiRouting';
 
 const BASE_URL: string = (import.meta.env.VITE_API_URL as string) || '/api';
 
@@ -42,6 +43,9 @@ const backoffMs = (attempt: number): number => Math.floor(Math.random() * Math.m
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
   if (token) config.headers.set('Authorization', `Bearer ${token}`);
+  // Strangler routing: send migrated domains to /api/v1 when the cutover flag
+  // is on. Default is legacy `/api`, so behaviour is unchanged until enabled.
+  config.baseURL = apiBaseFor(config.url || '');
   if (isReadMethod(config.method) && !config.timeout) config.timeout = READ_TIMEOUT_MS;
   return config;
 });
@@ -57,7 +61,7 @@ async function refreshSession(): Promise<string | null> {
 
   refreshing = (async () => {
     try {
-      const res = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken }, { timeout: WRITE_TIMEOUT_MS });
+      const res = await axios.post(resolveApiUrl('/auth/refresh'), { refreshToken }, { timeout: WRITE_TIMEOUT_MS });
       const data = res.data;
       if (data?.success && data.token) {
         saveSession({ token: data.token, refreshToken: data.refreshToken ?? refreshToken });

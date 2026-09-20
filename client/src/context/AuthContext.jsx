@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import api from '../utils/api';
+import { resolveApiUrl } from '../utils/apiRouting';
+import { adaptAuthResponse } from '../utils/platformBridge';
 import db from '../db';
 import {
   clearSession,
@@ -44,13 +46,12 @@ async function resumeSession() {
   if (!refreshToken) return null;
 
   try {
-    const apiUrl = import.meta.env.VITE_API_URL || '/api';
-    const res = await fetch(`${apiUrl}/auth/refresh`, {
+    const res = await fetch(resolveApiUrl('/auth/refresh'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    const json = await res.json();
+    const json = adaptAuthResponse('/auth/refresh', await res.json());
     if (!json?.success || !json.token) {
       clearSession();
       return null;
@@ -103,13 +104,12 @@ export function AuthProvider({ children }) {
   }, [token, user?.role]);
 
   const login = useCallback(async (email, password) => {
-    const apiUrl = import.meta.env.VITE_API_URL || '/api';
-    const res = await fetch(`${apiUrl}/auth/login`, {
+    const res = await fetch(resolveApiUrl('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const json = await res.json();
+    const json = adaptAuthResponse('/auth/login', await res.json());
     if (json.pending) {
       return json;
     }
@@ -160,7 +160,7 @@ export function AuthProvider({ children }) {
     const refreshToken = getRefreshToken();
     if (refreshToken) {
       try {
-        await fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/logout`, {
+        await fetch(resolveApiUrl('/auth/logout'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),

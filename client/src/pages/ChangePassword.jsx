@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import UzerLogo from '../components/UzerLogo';
 import { setUser as setStoredUser } from '../utils/tokenStore';
+import { resolveApiUrl } from '../utils/apiRouting';
 
 // Forced password change for accounts flagged `mustChangePassword`
 // (e.g. the securely-bootstrapped super admin). Closes audit finding V4.
@@ -29,8 +30,7 @@ export default function ChangePassword() {
     }
     setLoading(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || '/api';
-      const res = await fetch(`${apiUrl}/auth/change-password`, {
+      const res = await fetch(resolveApiUrl('/auth/change-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ currentPassword, newPassword }),
