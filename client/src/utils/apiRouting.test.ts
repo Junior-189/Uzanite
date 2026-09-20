@@ -62,6 +62,8 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/reports/summary')).toBe(true);
     expect(m.isRoutedToPlatform('/broadcast/send')).toBe(true);
     expect(m.isRoutedToPlatform('/broadcast/contacts')).toBe(true);
+    expect(m.isRoutedToPlatform('/whatsapp/status')).toBe(true);
+    expect(m.isRoutedToPlatform('/chat/send')).toBe(true);
     expect(m.isRoutedToPlatform('/staff')).toBe(true);
     expect(m.isRoutedToPlatform('/staff/login')).toBe(true);
     expect(m.isRoutedToPlatform('/admin/users')).toBe(true);
@@ -105,6 +107,5 @@ describe('apiRouting (Strangler cutover)', () => {
 
   it('does not route domains the platform does not implement yet', async () => {
     const m = await loadWithFlag('true');
-    expect(m.isRoutedToPlatform('/chat/send')).toBe(false);
   });
 });

@@ -99,3 +99,13 @@ export type SendMediaMessageInput = z.infer<typeof sendMediaMessageSchema>;
 export type ListMessagesQuery = z.infer<typeof listMessagesQuery>;
 export type ListConversationsQuery = z.infer<typeof listConversationsQuery>;
 export type ListFlowTracesQuery = z.infer<typeof listFlowTracesQuery>;
+
+// Legacy `/chat` wrappers over the messaging module (client Chat panel).
+export const chatPhoneParam = z.object({ phone: z.string().trim().min(5).max(32) });
+export const chatSendSchema = z
+  .object({
+    phone: z.string().trim().min(5).max(32),
+    message: z.string().trim().min(1).max(4000),
+  })
+  .strict();
+export type ChatSendInput = z.infer<typeof chatSendSchema>;

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   listConversationsQuery,
@@ -26,6 +26,72 @@ import { WhatsAppService } from './whatsapp.service';
 @Controller('whatsapp')
 export class WhatsAppController {
   constructor(private readonly whatsapp: WhatsAppService) {}
+
+  // ── Legacy-shaped account lifecycle adapters (client WhatsApp page) ─────────
+
+  @Get('status')
+  @RequirePermission('whatsapp')
+  async status(@TenantId() tenantId: string) {
+    const { account } = await this.whatsapp.getAccount(tenantId);
+    const health = await this.whatsapp.health(tenantId);
+    return {
+      success: true,
+      transport: 'meta',
+      connected: health.configured && account?.status === 'connected',
+      status: health.status,
+      phoneNumberId: account?.phoneNumberId ?? null,
+      displayPhoneNumber: health.displayPhoneNumber,
+      botPaused: (account as { botPaused?: boolean } | null)?.botPaused ?? false,
+    };
+  }
+
+  @Get('meta/credentials')
+  @RequirePermission('whatsapp')
+  async metaCredentials(@TenantId() tenantId: string) {
+    const { account } = await this.whatsapp.getAccount(tenantId);
+    return {
+      success: true,
+      account: account ? { ...account, hasToken: !!(account as { hasAccessToken?: boolean }).hasAccessToken } : null,
+    };
+  }
+
+  @Post('meta/credentials')
+  @RequirePermission('whatsapp')
+  saveMetaCredentials(@TenantId() tenantId: string, @Body(new ZodValidationPipe(upsertWhatsAppAccountSchema)) body: unknown) {
+    return this.whatsapp.upsertAccount(tenantId, body as never);
+  }
+
+  @Post('disconnect')
+  @RequirePermission('whatsapp')
+  disconnect(@TenantId() tenantId: string) {
+    return this.whatsapp.deleteAccount(tenantId);
+  }
+
+  @Post('pause')
+  @RequirePermission('whatsapp')
+  pause(@TenantId() tenantId: string) {
+    return this.whatsapp.setBotPaused(tenantId, true);
+  }
+
+  @Post('resume')
+  @RequirePermission('whatsapp')
+  resume(@TenantId() tenantId: string) {
+    return this.whatsapp.setBotPaused(tenantId, false);
+  }
+
+  // The Meta Cloud API has no QR pairing; the client only calls these for the
+  // (removed) Baileys transport.
+  @Post('connect')
+  @RequirePermission('whatsapp')
+  connect() {
+    throw new BadRequestException('QR pairing is not supported on the Meta Cloud API transport. Configure Meta credentials instead.');
+  }
+
+  @Get('qr')
+  @RequirePermission('whatsapp')
+  qr() {
+    throw new BadRequestException('QR pairing is not supported on the Meta Cloud API transport. Configure Meta credentials instead.');
+  }
 
   @Get('account')
   @RequirePermission('whatsapp')

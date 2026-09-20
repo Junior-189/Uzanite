@@ -89,6 +89,14 @@ export class WhatsAppService {
     return { success: true, account: this.publicAccount(account as AccountRow) };
   }
 
+  /** Toggle the bot auto-reply pause flag (legacy `/whatsapp/pause|resume`). */
+  async setBotPaused(tenantId: string, paused: boolean) {
+    const account = await this.prisma.db.whatsAppAccount.findFirst({ where: { tenantId } });
+    if (!account) throw new NotFoundException('WhatsApp account not found');
+    await this.prisma.db.whatsAppAccount.update({ where: { id: account.id }, data: { botPaused: paused } });
+    return { success: true, botPaused: paused };
+  }
+
   async deleteAccount(tenantId: string) {
     const res = await this.prisma.db.whatsAppAccount.deleteMany({ where: { tenantId } });
     if (res.count === 0) throw new NotFoundException('WhatsApp account not found');

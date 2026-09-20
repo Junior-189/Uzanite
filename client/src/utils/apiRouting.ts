@@ -37,6 +37,8 @@ const DEFAULT_PLATFORM_PREFIXES = [
   '/debts',
   '/reports',
   '/broadcast',
+  '/whatsapp',
+  '/chat',
   '/staff',
   // Admin-users sub-paths only. `/admin/feature-flags` and
   // `/admin/activity-logs|login-attempts` remain legacy until those domains

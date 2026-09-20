@@ -31,9 +31,9 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Purchases | `/api/purchases*` | `/api/v1/purchases*` | **READY** | routed; platform module built + tested (idempotent by `clientRef`, multipart receipt upload + signed `receiptPath`, update, soft delete) |
 | Debts | `/api/debts*` | `/api/v1/debts*` | **READY** | routed; platform module built + tested (list/totals, create/update, partial/full payment, reminders queued via outbox, soft delete). Client `apiAction` signature bug fixed |
 | Reports | `/api/reports/summary`, `/reports/:key`, `/reports/:key/csv` | `/api/v1/reports/...` (same) | **READY** | routed; platform computes summary metrics + CSV/PDF for orders/products/expenses/purchases/debts/staff/full. PDF layout is a functional table design (legacy cover/chart styling is a visual follow-up), data is complete |
-| Messaging / WhatsApp | `/api/whatsapp/{status,qr,connect,disconnect,meta/credentials}` | `/api/v1/whatsapp/{account,templates,messages,conversations}` | **BLOCKED** | legacy QR/Baileys connect flow has no platform equivalent; per-tenant credentials shape differs |
+| Messaging / WhatsApp | `/api/whatsapp/{status,meta/credentials,disconnect,pause,resume}` | `/api/v1/whatsapp/*` | **READY** | routed; legacy adapters over the platform account (`status`, `meta/credentials` GET/POST, `disconnect`, `pause/resume`). `/connect` + `/qr` are Baileys-only and return 400 — the client uses the Meta credentials path |
 | Contacts | `/api/contacts*` | `/api/v1/contacts` | **READY** | routed; platform module built + tested (CRUD, soft delete/restore, chat history, outbox email) |
-| Chat | `/api/chat/*` | — | **BLOCKED** | not implemented |
+| Chat | `/api/chat/:phone`, `/api/chat/send` | `/api/v1/chat/:phone`, `/api/v1/chat/send` | **READY** | routed; `/chat/:phone` maps to message history, `/chat/send` enqueues over the Meta send path |
 | Staff | `/api/staff*`, `/staff/me` | `/api/v1/staff*` | **READY** | routed; platform module built + tested (email login with `type:'staff'` tokens, owner-only CRUD, permissions, status, reset-password). Staff sessions use access tokens only (no refresh — `refresh_tokens` is FK-bound to users) |
 | Admin (users) | `/api/admin/users*`, `/api/admin/sub-admins*`, `/api/admin/stats`, `/api/admin/impersonate/:id` | `/api/v1/admin/users*` etc. | **READY** | routed sub-paths; platform module built + tested (list/stats, approve/reject/suspend, update name/email, reset-password, delete, impersonate, sub-admin CRUD). Legacy shapes adapted (`_id`, `businessName`, counts) |
 | Admin (feature-flags) | `/api/admin/feature-flags*` | `/api/v1/admin/feature-flags*` (legacy keyed shape) | **READY** | routed; global + per-tenant overrides, `{features,global}`/`{flags}` shapes, `/me` for tenants |
@@ -67,6 +67,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. Platform: build **chat + WhatsApp account lifecycle** (broadcast done; everything else migrated). Account lifecycle adapters must drop the Baileys QR flow in favour of Meta credentials.
+3. **All client-facing domains are migrated.** The remaining work is the final legacy removal (Baileys transport, MongoDB models, Express routes) once the platform runs production traffic for a soak period.
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).
