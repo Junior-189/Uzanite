@@ -15,7 +15,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Client surface | Legacy endpoint(s) | Platform endpoint(s) | Status | Blocker |
 |---|---|---|---|---|
 | Auth (login/refresh/logout/register/forgot/reset/change-password/me) | `/api/auth/*` | `/api/v1/auth/*` | **ROUTED** | — (adapter: `platformBridge.ts`) |
-| Auth: Google / staff login / theme | `/api/auth/google`, `/api/staff/login`, `/api/auth/theme` | — | legacy-only | platform has no equivalent |
+| Auth: Google / staff login / theme | `/api/auth/google`, `/api/staff/login`, `/api/auth/theme` | `/api/v1/staff/login` (staff login now routed) | **PARTIAL** | staff login moved to the platform; Google + theme remain legacy-only |
 | Two-factor | — (new) | `/api/v1/auth/login/2fa`, `/totp/*` | **ROUTED** | client UI added |
 | Tenancy profile | `/api/businesses`, `/api/businesses/:id` | `/api/v1/tenants/me`, `/tenants/me/payment-methods` | **ROUTED** | adapter: `tenantBridge.ts` |
 | Billing | `/api/billing/plans`, `/billing/status` | `/api/v1/billing/plans`, `/billing/status` | **READY** | client does not call billing yet |
@@ -30,7 +30,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Messaging / WhatsApp | `/api/whatsapp/{status,qr,connect,disconnect,meta/credentials}` | `/api/v1/whatsapp/{account,templates,messages,conversations}` | **BLOCKED** | legacy QR/Baileys connect flow has no platform equivalent; per-tenant credentials shape differs |
 | Contacts | `/api/contacts*` | `/api/v1/contacts` | **READY** | routed; platform module built + tested (CRUD, soft delete/restore, chat history, outbox email) |
 | Chat | `/api/chat/*` | — | **BLOCKED** | not implemented |
-| Staff | `/api/staff*`, `/staff/me` | — | **BLOCKED** | staff management not implemented (memberships API exists but paths/shape differ) |
+| Staff | `/api/staff*`, `/staff/me` | `/api/v1/staff*` | **READY** | routed; platform module built + tested (email login with `type:'staff'` tokens, owner-only CRUD, permissions, status, reset-password). Staff sessions use access tokens only (no refresh — `refresh_tokens` is FK-bound to users) |
 | Admin (tenants) | `/api/admin/users*` | `/api/v1/admin/tenants*` | **BLOCKED** | different path + shape; platform has no user/sub-admin CRUD |
 | Admin (stats/flags/login-attempts) | `/api/admin/{stats,feature-flags,login-attempts}*` | — | **BLOCKED** | not implemented |
 | Dashboard | `/api/dashboard/*` | — | **BLOCKED** | not implemented |
@@ -41,7 +41,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 ## What this means
 
-1. **The cutover cannot "finish" by deletion.** ~12 domains the client uses still have **no platform implementation**. Completing the migration requires **building** those platform modules (staff/memberships-aligned, admin users, reports, recycle-bin, broadcast, chat, contacts, WhatsApp account lifecycle) — a multi-week effort, not a delete.
+1. **The cutover cannot "finish" by deletion.** Several domains the client uses still have **no platform implementation**. Completing the migration requires **building** those platform modules (admin users, reports, broadcast, chat, WhatsApp account lifecycle, Google/theme auth) — a multi-week effort, not a delete.
 2. **Batch D is gated on that build.** Baileys can only be deleted once the platform (or a still-present legacy worker) owns WhatsApp; Mongo/Express can only be deleted once every domain above is cut over and reconciled.
 3. **Uploads are now resolved.** ✅ Platform `POST /api/v1/files` (private, content-sniffed, HMAC-signed downloads) unblocks product images and payment proofs. Wiring the client upload call sites is the remaining client work.
 4. **Dashboard is now resolved.** ✅ Platform `GET /api/v1/dashboard/stats` mirrors the legacy shape and is routed.
@@ -64,6 +64,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites); build **reports, admin users, staff, chat, broadcast** (contacts + recycle-bin done).
+3. Platform: **orders receipts** aligned to the client paths (or migrate the client call sites); build **reports, admin users, chat, broadcast** (contacts, recycle-bin, products, staff done).
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).

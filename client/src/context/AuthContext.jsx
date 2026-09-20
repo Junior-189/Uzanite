@@ -161,7 +161,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const staffLogin = useCallback(async (email, password) => {
-    const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/staff/login`, {
+    const res = await fetch(resolveApiUrl('/staff/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),

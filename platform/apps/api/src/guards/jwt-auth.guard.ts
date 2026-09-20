@@ -55,6 +55,43 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Not authorized, token failed');
     }
 
+    // Platform staff tokens carry `type: 'staff'` with a platform UUID subject
+    // and are not Users, so they build their principal from the staff row
+    // (tenant + page permissions) instead of a membership. Legacy Express staff
+    // tokens also use `type: 'staff'` but carry a Mongo ObjectId in `id` and no
+    // `sub`; those fall through to the identity resolver below.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (payload.type === 'staff' && typeof payload.sub === 'string' && UUID_RE.test(payload.sub)) {
+      const staffId = payload.sub;
+      const staff = await runAsSystem(() =>
+        this.prisma.db.staff.findFirst({
+          where: { id: staffId },
+          select: { id: true, name: true, tenantId: true, role: true, permissions: true, tokenVersion: true, status: true },
+        })
+      ).catch(() => null);
+      if (!staff) throw new UnauthorizedException('Not authorized, token failed');
+      if ((payload.tv ?? 0) !== staff.tokenVersion) {
+        throw new UnauthorizedException('Session expired. Please sign in again.');
+      }
+      if (staff.status !== 'active') throw new ForbiddenException('Account is inactive. Contact your manager.');
+
+      const principal: Principal = {
+        userId: staff.id,
+        name: staff.name ?? '',
+        platformRole: null,
+        tenantId: staff.tenantId,
+        membershipId: null,
+        role: 'staff',
+        permissions: staff.permissions ?? [],
+        tokenVersion: staff.tokenVersion,
+        impersonatedBy: null,
+      };
+      setPrincipal(principal);
+      setTenant(principal.tenantId);
+      (req as Request & { principal?: Principal }).principal = principal;
+      return true;
+    }
+
     // C4: resolve a claim from EITHER system (platform UUID or legacy ObjectId)
     // to a platform user id.
     const resolved = await this.identity.resolveUserId(payload);

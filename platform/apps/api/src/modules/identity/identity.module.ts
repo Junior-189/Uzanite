@@ -8,6 +8,6 @@ import { LockoutService } from '../../security/lockout.service';
 @Module({
   controllers: [AuthController],
   providers: [AuthService, TokenService, LockoutService],
-  exports: [TokenService, AuthService],
+  exports: [TokenService, AuthService, LockoutService],
 })
 export class IdentityModule {}

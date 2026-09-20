@@ -14,6 +14,8 @@ export interface AccessTokenClaims {
   permissions?: string[];
   tokenVersion: number;
   impersonatedBy?: string | null;
+  // 'staff' issues a tenant-staff principal (legacy Express `type: 'staff'`).
+  type?: string | null;
 }
 
 interface RefreshMeta {
@@ -47,6 +49,7 @@ export class TokenService {
       perms: claims.permissions ?? [],
       tv: claims.tokenVersion,
       act: claims.impersonatedBy ?? null,
+      type: claims.type ?? null,
     };
     return this.jwt.signAsync(payload, this.keys.signOptions(ttl));
   }

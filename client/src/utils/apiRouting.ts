@@ -31,6 +31,7 @@ export const PLATFORM_PREFIXES = [
   '/contacts',
   '/recycle-bin',
   '/products',
+  '/staff',
 ] as const;
 
 // Flows the platform does not implement yet — always legacy, even when the
@@ -39,7 +40,6 @@ export const LEGACY_ONLY_PREFIXES = [
   '/auth/google',
   '/auth/staff',
   '/auth/theme',
-  '/staff',
   '/products/bulk',
 ] as const;
 

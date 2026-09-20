@@ -39,6 +39,8 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'FlowTrace',
   // Privacy / data-subject requests (Phase M13)
   'PrivacyRequest',
+  // Tenant staff accounts (Phase M17)
+  'Staff',
 ]);
 
 // Models with an optional tenantId (global + per-tenant rows) are scoped

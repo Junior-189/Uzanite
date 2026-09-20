@@ -231,7 +231,31 @@ export class AuthService {
     if (!rotated) throw new UnauthorizedException('Invalid or expired session');
 
     const user = await this.prisma.db.user.findFirst({ where: { id: rotated.userId, deletedAt: null } });
-    if (!user) throw new UnauthorizedException('Account not found');
+    if (!user) {
+      // Staff sessions rotate through the same refresh-token table (keyed by the
+      // staff id). Re-issue a `type: 'staff'` access token instead of failing.
+      const staff = await runAsSystem(() =>
+        this.prisma.db.staff.findFirst({
+          where: { id: rotated.userId },
+          select: { id: true, tenantId: true, permissions: true, tokenVersion: true, status: true },
+        })
+      );
+      if (!staff) throw new UnauthorizedException('Account not found');
+      if (staff.status !== 'active') {
+        await this.tokens.revokeAllForUser(staff.id);
+        throw new ForbiddenException('Account is not active');
+      }
+      const token = await this.tokens.signAccess({
+        userId: staff.id,
+        tenantId: staff.tenantId,
+        membershipId: null,
+        role: 'staff',
+        permissions: staff.permissions,
+        tokenVersion: staff.tokenVersion,
+        type: 'staff',
+      });
+      return { success: true, token, refreshToken: rotated.refreshToken };
+    }
     if (user.status === 'suspended' || user.status === 'rejected') {
       await this.tokens.revokeAllForUser(user.id);
       throw new ForbiddenException('Account is not active');

@@ -49,6 +49,7 @@ import { FilesModule } from './modules/files/files.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { RecycleBinModule } from './modules/recycle-bin/recycle-bin.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
+import { StaffModule } from './modules/staff/staff.module';
 
 @Module({
   imports: [
@@ -133,6 +134,7 @@ import { ContactsModule } from './modules/contacts/contacts.module';
     DashboardModule,
     RecycleBinModule,
     ContactsModule,
+    StaffModule,
     HealthModule,
   ],
   providers: [

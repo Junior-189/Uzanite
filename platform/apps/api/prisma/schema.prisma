@@ -225,6 +225,7 @@ model Tenant {
   webhookEvents      WebhookEvent[]
   conversations      Conversation[]
   flowTraces         FlowTrace[]
+  staff              Staff[]
 
   privacyRequests PrivacyRequest[]
 
@@ -987,6 +988,33 @@ model WhatsAppContact {
   // Ordered to cover the compound keyset cursor (lastMessageAt DESC, id DESC).
   @@index([tenantId, lastMessageAt, id])
   @@map("whatsapp_contacts")
+}
+
+// Tenant-level staff accounts (legacy Express `Staff` model). Distinct from
+// `User`/`Membership`: staff log in with their own credentials and carry a
+// page-permission list, and their email is globally unique (login is by email
+// across tenants, mirroring the legacy behaviour).
+model Staff {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  avatar       String    @default("")
+  role         String    @default("staff")
+  permissions  String[]  @default([])
+  status       String    @default("active")
+  createdBy    String?   @map("created_by") @db.Uuid
+  lastLogin    DateTime? @map("last_login")
+  // Incremented on password change to invalidate issued access tokens.
+  tokenVersion Int       @default(0) @map("token_version")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("staff")
 }
 
 // Inbound + outbound message history. Outbound rows double as the durable send
