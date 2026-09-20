@@ -119,9 +119,9 @@ requests are still hitting `/api/v1/<domain>` in the proxy logs.
 ## 6. Domain-specific caveats
 
 - **auth** — both stacks share `JWT_SECRET` and identity aliases, so a token from
-  either authenticates against both. Enabling `auth` moves login/refresh/me to
-  the platform; legacy staff/Google/theme login stays on `/auth/staff`,
-  `/auth/google`, `/auth/theme` (legacy-only).
+  either authenticates against both. Enabling `auth` moves login/refresh/me,
+  Google sign-in, theme, and staff login to the platform; only `/auth/staff`
+  (the legacy alternate staff login) stays legacy.
 - **products** — `/products/bulk` (CSV import) is legacy-only and remains so even
   when `products` is enabled.
 - **admin** — the admin-panel **users** surface routes to the platform, but the

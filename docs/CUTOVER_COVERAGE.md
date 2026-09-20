@@ -15,7 +15,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Client surface | Legacy endpoint(s) | Platform endpoint(s) | Status | Blocker |
 |---|---|---|---|---|
 | Auth (login/refresh/logout/register/forgot/reset/change-password/me) | `/api/auth/*` | `/api/v1/auth/*` | **ROUTED** | — (adapter: `platformBridge.ts`) |
-| Auth: Google / staff login / theme | `/api/auth/google`, `/api/staff/login`, `/api/auth/theme` | `/api/v1/staff/login`, `/api/v1/auth/theme` | **PARTIAL** | staff login + theme routed; Google login remains legacy-only |
+| Auth: Google / staff login / theme | `/api/auth/google`, `/api/staff/login`, `/api/auth/theme` | `/api/v1/auth/google`, `/api/v1/staff/login`, `/api/v1/auth/theme` | **READY** | routed; Google ID-token sign-in (tokeninfo verify) incl. staff-by-email and pending tenant sign-ups |
 | Two-factor | — (new) | `/api/v1/auth/login/2fa`, `/totp/*` | **ROUTED** | client UI added |
 | Tenancy profile | `/api/businesses`, `/api/businesses/:id` | `/api/v1/tenants/me`, `/tenants/me/payment-methods` | **ROUTED** | adapter: `tenantBridge.ts` |
 | Billing | `/api/billing/plans`, `/billing/status` | `/api/v1/billing/plans`, `/billing/status` | **READY** | client does not call billing yet |
@@ -44,7 +44,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 ## What this means
 
-1. **The cutover cannot "finish" by deletion.** A few domains the client uses still have **no platform implementation**: **broadcast, chat, WhatsApp account lifecycle** (all blocked on the Meta Cloud API transport — the platform deliberately has no Baileys) and **Google login**. Completing the migration requires **building** those, plus deciding the transport architecture.
+1. **The cutover cannot "finish" by deletion.** Three domains the client uses still have **no platform implementation**: **broadcast, chat, WhatsApp account lifecycle** — all blocked on the Meta Cloud API transport (the platform deliberately has no Baileys). Completing the migration requires building those plus deciding the transport architecture.
 2. **Batch D is gated on that build.** Baileys can only be deleted once the platform (or a still-present legacy worker) owns WhatsApp; Mongo/Express can only be deleted once every domain above is cut over and reconciled.
 3. **Uploads are now resolved.** ✅ Platform `POST /api/v1/files` (private, content-sniffed, HMAC-signed downloads) unblocks product images and payment proofs. Wiring the client upload call sites is the remaining client work.
 4. **Dashboard is now resolved.** ✅ Platform `GET /api/v1/dashboard/stats` mirrors the legacy shape and is routed.
@@ -67,6 +67,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. Platform: build **chat, broadcast, WhatsApp account lifecycle, Google login** (contacts, recycle-bin, products, orders+receipts, staff, admin users, expenses/purchases/debts, reports, admin flags/logs, theme done).
+3. Platform: build the **WhatsApp tier — chat, broadcast, WhatsApp account lifecycle** (everything else is migrated: contacts, recycle-bin, products, orders+receipts, staff, admin users, expenses/purchases/debts, reports, admin flags/logs, theme, Google login).
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).

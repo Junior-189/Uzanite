@@ -116,6 +116,7 @@ Copy `platform/.env.example` → `platform/.env` and populate. Canonical variabl
 | Variable | Required | Purpose |
 |---|---|---|
 | `SMTP_*`, `EMAIL_FROM` | for email | Password resets, staff reset notices |
+| `GOOGLE_CLIENT_ID` | for Google login | Must match the SPA's `VITE_GOOGLE_CLIENT_ID`; unset disables the endpoint |
 | `META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_GRAPH_VERSION`, `WHATSAPP_FLOW_MODE` | for WhatsApp | Messaging endpoints disabled without them |
 | `RETENTION_*` | recommended | PDPA retention sweeps (worker) |
 | `METRICS_TOKEN` | yes (prod) | Protects `GET /api/v1/metrics`; denied when unset |
@@ -327,8 +328,8 @@ paths still served.
 - **Local storage is single-host.** Multi-host/autoscaled API requires object
   storage.
 - **No down migrations.** Rollback is restore/PITR based by design.
-- Reports, broadcast, chat, WhatsApp account lifecycle, Google/theme auth, and
-  the admin feature-flags/activity-logs pages remain **legacy-only** — see
+- Broadcast, chat, and WhatsApp account lifecycle remain **legacy-only** (the
+  platform has no Baileys; they need the Meta Cloud API transport) — see
   `CUTOVER_COVERAGE.md`.
 - Receipt PDFs are generated in the API process (pdfkit + qrcode); `send-receipt`
   queues a `receipt.send` outbox event for the worker to deliver.

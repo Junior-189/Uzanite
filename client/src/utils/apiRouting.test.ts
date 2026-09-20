@@ -22,6 +22,7 @@ describe('apiRouting (Strangler cutover)', () => {
   it('routes auth to /api/v1 when VITE_API_V1=true', async () => {
     const m = await loadWithFlag('true');
     expect(m.isRoutedToPlatform('/auth/login')).toBe(true);
+    expect(m.isRoutedToPlatform('/auth/google')).toBe(true);
     expect(m.apiBaseFor('/auth/refresh')).toBe('/api/v1');
     expect(m.resolveApiUrl('/auth/me')).toBe('/api/v1/auth/me');
   });
@@ -35,9 +36,9 @@ describe('apiRouting (Strangler cutover)', () => {
 
   it('never routes legacy-only auth flows to the platform', async () => {
     const m = await loadWithFlag('true');
-    expect(m.isRoutedToPlatform('/auth/google')).toBe(false);
     expect(m.isRoutedToPlatform('/auth/staff/login')).toBe(false);
-    expect(m.apiBaseFor('/auth/google')).toBe('/api');
+    expect(m.apiBaseFor('/auth/staff/login')).toBe('/api');
+    expect(m.isRoutedToPlatform('/products/bulk')).toBe(false);
   });
 
   it('routes fully-covered domains when enabled', async () => {

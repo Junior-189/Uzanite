@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -347,6 +348,107 @@ export class AuthService {
         permissions: membership?.permissions ?? [],
         tenant: membership?.tenant ?? null,
       },
+    };
+  }
+
+  /**
+   * Google sign-in (legacy `/auth/google`). Verifies the Google ID token via
+   * the tokeninfo endpoint (no SDK dependency, matching the legacy app), then:
+   *   - staff emails resolve to a Staff account (avoids creating a tenant),
+   *   - otherwise signs in / signs up a tenant user (new signups are pending).
+   */
+  async googleLogin(idToken: string, meta: RequestMeta) {
+    const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
+    if (!clientId) {
+      throw new HttpException({ success: false, error: 'Google login is not configured on the server' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    let payload: { sub?: string; email?: string; name?: string; picture?: string; aud?: string; exp?: number };
+    try {
+      const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+      payload = (await res.json()) as typeof payload;
+      if (!res.ok || !payload.sub) throw new Error('invalid');
+    } catch {
+      throw new UnauthorizedException('Invalid Google token');
+    }
+    if (payload.aud !== clientId) throw new UnauthorizedException('Token audience mismatch');
+    if (!payload.exp || payload.exp * 1000 < Date.now()) throw new UnauthorizedException('Google token expired');
+
+    const email = (payload.email || '').toLowerCase();
+    if (!email) throw new BadRequestException('Google account has no email');
+    const name = payload.name || email.split('@')[0];
+
+    // ── Staff by email ──
+    const staff = await runAsSystem(() => this.prisma.db.staff.findUnique({ where: { email } }));
+    if (staff) {
+      if (staff.status !== 'active') throw new ForbiddenException('Account is inactive. Contact your manager.');
+      await runAsSystem(() => this.prisma.db.staff.update({ where: { id: staff.id }, data: { lastLogin: new Date() } }));
+      const token = await this.tokens.signAccess({
+        userId: staff.id,
+        tenantId: staff.tenantId,
+        membershipId: null,
+        role: 'staff',
+        permissions: staff.permissions,
+        tokenVersion: staff.tokenVersion,
+        type: 'staff',
+      });
+      return {
+        success: true,
+        token,
+        user: { _id: staff.id, name: staff.name, email: staff.email, role: 'staff', permissions: staff.permissions, businessId: staff.tenantId, avatar: '' },
+      };
+    }
+
+    // ── Tenant / admin user ──
+    let user = await this.prisma.db.user.findFirst({ where: { email, deletedAt: null } });
+    let isNew = false;
+    if (!user) {
+      const tenantId = newId();
+      const userId = newId();
+      await runAsSystem(() =>
+        this.prisma.transaction(async (tx) => {
+          await tx.tenant.create({ data: { id: tenantId, slug: `biz_${randomToken(6)}`, name: `${name}'s Shop`, status: 'pending' } });
+          await tx.tenantSettings.create({ data: { tenantId } });
+          await tx.user.create({
+            data: { id: userId, email, name, avatarUrl: payload.picture ?? null, authProvider: 'google', status: 'pending' },
+          });
+          await tx.membership.create({ data: { id: newId(), userId, tenantId, role: 'owner', status: 'active' } });
+          await tx.subscription.create({ data: { id: newId(), tenantId, planKey: 'free', status: 'active' } });
+        })
+      );
+      user = await this.prisma.db.user.findFirst({ where: { id: userId } });
+      isNew = true;
+    } else if (!user.avatarUrl || user.authProvider !== 'google') {
+      await runAsSystem(() =>
+        this.prisma.db.user.update({
+          where: { id: user!.id },
+          data: { avatarUrl: user!.avatarUrl || payload.picture || null, authProvider: user!.passwordHash ? user!.authProvider : 'google' },
+        })
+      );
+    }
+    if (!user) throw new UnauthorizedException('Google sign-in failed');
+    if (user.status === 'rejected') throw new ForbiddenException('Your account has been rejected. Contact support.');
+    if (user.status === 'suspended') throw new ForbiddenException('Your account has been suspended. Contact support.');
+
+    await this.recordLogin(email, user.id, 'success', 'Google sign-in', meta);
+    const session = await this.issueSession(user, meta);
+    const membership = await runAsSystem(() =>
+      this.prisma.db.membership.findFirst({
+        where: { userId: user!.id, status: 'active' },
+        orderBy: { createdAt: 'asc' },
+        include: { tenant: { select: { id: true, name: true } } },
+      })
+    );
+    return {
+      ...session,
+      user: {
+        ...session.user,
+        businessId: membership?.tenantId ?? null,
+        businessName: membership?.tenant?.name ?? null,
+        theme: user.theme,
+        avatar: user.avatarUrl ?? '',
+      },
+      ...(session.pending ? { message: isNew ? 'Registration successful! Your account is pending admin approval.' : 'Your account is pending admin approval. Please wait for approval.' } : {}),
     };
   }
 

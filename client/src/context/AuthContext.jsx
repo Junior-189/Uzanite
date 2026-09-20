@@ -143,8 +143,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const googleLogin = useCallback(async (credential) => {
-    const apiUrl = import.meta.env.VITE_API_URL || '/api';
-    const res = await fetch(`${apiUrl}/auth/google`, {
+    const res = await fetch(resolveApiUrl('/auth/google'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken: credential }),

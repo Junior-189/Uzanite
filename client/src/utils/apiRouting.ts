@@ -66,7 +66,6 @@ export const PLATFORM_PREFIXES: readonly string[] =
 // Flows the platform does not implement yet — always legacy, even when the
 // domain prefix is otherwise routed (e.g. product bulk-CSV import).
 export const LEGACY_ONLY_PREFIXES = [
-  '/auth/google',
   '/auth/staff',
   '/products/bulk',
 ] as const;

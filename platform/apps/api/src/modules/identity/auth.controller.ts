@@ -4,6 +4,7 @@ import { Request } from 'express';
 import {
   changePasswordSchema,
   forgotPasswordSchema,
+  googleLoginSchema,
   loginMfaSchema,
   loginSchema,
   logoutSchema,
@@ -44,6 +45,13 @@ export class AuthController {
   @Post('login')
   login(@Body(new ZodValidationPipe(loginSchema)) body: unknown, @Req() req: Request) {
     return this.auth.login(body as never, metaOf(req));
+  }
+
+  @Public()
+  @RateLimit({ limit: 20, windowSeconds: 900, keyPrefix: 'auth:google', scope: 'ip' })
+  @Post('google')
+  google(@Body(new ZodValidationPipe(googleLoginSchema)) body: { idToken: string }, @Req() req: Request) {
+    return this.auth.googleLogin(body.idToken, metaOf(req));
   }
 
   @Public()
