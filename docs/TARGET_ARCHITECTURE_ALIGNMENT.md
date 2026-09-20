@@ -23,9 +23,9 @@
 | Signed object storage (S3/R2), no public disk | **PARTIAL** | Legacy `storageService` (local/S3 signed URLs); **platform has no upload endpoint yet** |
 | **Meta Cloud API only; drop Baileys** | **PARTIAL** | Platform is Meta-only; **legacy still ships Baileys** (`src/whatsapp/{client,transport}.js`, `@whiskeysockets/baileys`) |
 | Payments aggregator + webhooks (ClickPesa/AzamPay; Mixx/Airtel) | **PARTIAL** | Adapters exist (`platform/apps/api/src/modules/finance/payments/*`); certification pending; manual is default |
-| Frontend React **+ TypeScript + TanStack Query + RHF + Zod + shadcn** | **GAP** | `client/` is JavaScript React 19 + Vite; no `tsconfig.json` |
-| Capacitor Android (package-id repair) | **GAP** | `appId` mismatch (`capacitor.config.json` vs `applicationId`), `allowMixedContent`, `allowBackup` |
-| **Drop Electron → ship a PWA** | **CONTRADICTS** | `electron/` + electron-builder present; `manifest.json` not linked in `client/index.html` |
+| Frontend React **+ TypeScript + TanStack Query + RHF + Zod + shadcn** | **IN PROGRESS** | TypeScript enabled (`client/tsconfig.json`, `typecheck` gated in CI); `utils/tokenStore.ts` + `utils/api.ts` converted; TanStack Query provider wired; Zod used for session validation. RHF + page-by-page migration pending |
+| Capacitor Android (package-id repair) | **DONE** | Unified to `com.uzanite.app` (capacitor config, gradle namespace+applicationId, strings.xml, `MainActivity` package); `allowBackup=false`, `allowMixedContent=false`. **Android build must be verified with `cap sync` + gradle** |
+| **Drop Electron → ship a PWA** | **PARTIAL** | PWA now properly configured (manifest linked, viewport/theme meta, versioned service worker); **Electron still present** (removed in Batch D) |
 | Observability: Pino + OpenTelemetry + Sentry | **PARTIAL** | Pino + Sentry-compatible Store-API + W3C trace + optional OTLP (M12); **full OTel SDK not wired** |
 | REST `/api/v1` + OpenAPI | **DONE** | `platform/apps/api/openapi.json` + `platform/scripts/api-contract-check.mjs` |
 | **Move off MongoDB** | **PARTIAL** | Postgres platform exists; **Mongo/Express still present and used by the client** |
@@ -55,11 +55,12 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 3. **JWT key rotation (`kid`)**: `JwtKeyService` supports a `JWT_KEYS` key set with `JWT_ACTIVE_KID`; tokens verify against their header `kid`, so keys rotate without invalidating outstanding sessions. Retains pinned issuer/audience/HS256.
 - Verification: platform CI green — **API 180 tests / 31 files, worker 20, contracts 6**, typecheck, Prisma drift gate, build.
 
-### Batch C — Client modernization (Phase 5)
-1. **TypeScript** migration (incremental: `allowJs`, start with `utils/`, `context/`, `db/`).
-2. **TanStack Query** for server state; **React Hook Form + Zod** for forms.
-3. **PWA**: link `manifest.json`, versioned service-worker caches, `start_url` fix.
-4. Android: one `applicationId`, `allowBackup=false`, `allowMixedContent=false`.
+### Batch C — Client modernization (Phase 5) — ✅ foundation DONE, verified locally (not pushed)
+1. **TypeScript foundation:** added `client/tsconfig.json` (`strict`, `allowJs`, `checkJs:false`) and a `typecheck` script (gated in CI); converted `src/utils/tokenStore.ts` and `src/utils/api.ts` to fully-typed modules. Remaining `.jsx` files are still JS and convert page-by-page.
+2. **TanStack Query** provider wired (`src/lib/queryClient.ts`, mounted in `main.jsx`) with mobile-tuned defaults (reads retry, mutations never retry). **Zod** validates the persisted session profile in `tokenStore`. React Hook Form is deferred until a form is migrated (R8: no unused deps).
+3. **PWA:** `manifest.json` linked in `index.html` with `%BASE_URL%`, theme/apple meta, and a relative `start_url`/`scope`; service worker rewritten to **versioned caches** that purge only old versions (no more wipe-everything); SW update poll reduced from 60s to 6h + on-focus.
+4. **Android:** unified the package id to `com.uzanite.app` across `capacitor.config.json`, `build.gradle` (namespace + applicationId), `strings.xml`, and `MainActivity`; `allowBackup=false` and `allowMixedContent=false` already in place. Verify the native build with `npm run cap:sync` + gradle.
+- Verification: client `typecheck` ✅, `lint` ✅, `test` 16/16 ✅, `build` ✅.
 
 ### Batch D — Retire contradicted layers (destructive — needs sign-off, only after cutover)
 1. **Drop Electron** (the plan says PWA instead; Electron only wraps `uzanite.shop`).
@@ -88,6 +89,6 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 
 - **Batch A (positioning/docs):** ✅ done.
 - **Batch B (auth hardening):** ✅ done, verified locally (argon2id, admin TOTP 2FA, JWT `kid` rotation). **Not pushed** per operator instruction.
-- **Batch C (client TypeScript + TanStack Query/RHF/Zod + PWA + Android package-id repair):** recommended next.
+- **Batch C (client TypeScript foundation + TanStack Query/Zod + PWA + Android package-id repair):** ✅ foundation done, verified locally. Remaining: page-by-page TSX conversion, TanStack Query adoption per page, React Hook Form for forms, component library (shadcn/ui).
 - **Batch D (delete Electron/Baileys/Mongo):** destructive — only after Batch E cutover + reconciliation is green.
 - **Batch E (client cutover to `/api/v1`):** the core migration and the prerequisite for Batch D.

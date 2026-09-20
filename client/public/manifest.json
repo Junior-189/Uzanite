@@ -1,18 +1,29 @@
 {
+  "id": "uzanite",
   "name": "UZANITE",
   "short_name": "UZANITE",
   "description": "UZANITE — WhatsApp commerce + POS for Tanzanian businesses",
-  "start_url": "/",
+  "lang": "sw",
+  "dir": "ltr",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#030712",
   "theme_color": "#2563eb",
   "orientation": "any",
+  "categories": ["business", "productivity", "shopping"],
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

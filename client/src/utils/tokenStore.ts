@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * Credential storage for the admin client.
  *
@@ -33,10 +35,16 @@ const ACCESS_KEY = 'token';
 const REFRESH_KEY = 'refreshToken';
 const USER_KEY = 'user';
 
-// Access token: module-scoped, so it is gone on reload and never serialised.
-let accessToken = null;
+export type SessionUser = Record<string, unknown>;
 
-function safeSession() {
+// The persisted profile is untrusted input (it was written by a previous
+// version of the app, or could be tampered with). Validate it on read.
+const userSchema = z.record(z.string(), z.unknown());
+
+// Access token: module-scoped, so it is gone on reload and never serialised.
+let accessToken: string | null = null;
+
+function safeSession(): Storage | null {
   try {
     // Availability varies: private mode, blocked site data, embedded webviews.
     return typeof sessionStorage !== 'undefined' ? sessionStorage : null;
@@ -45,7 +53,7 @@ function safeSession() {
   }
 }
 
-export function getAccessToken() {
+export function getAccessToken(): string | null {
   if (accessToken) return accessToken;
   // Legacy sessions may still have one from before this change; adopt it once
   // into memory and remove the persisted copy.
@@ -54,7 +62,7 @@ export function getAccessToken() {
   if (legacy) {
     accessToken = legacy;
     try {
-      store.removeItem(ACCESS_KEY);
+      store?.removeItem(ACCESS_KEY);
     } catch {
       /* best effort */
     }
@@ -62,15 +70,15 @@ export function getAccessToken() {
   return accessToken;
 }
 
-export function setAccessToken(token) {
+export function setAccessToken(token: string | null): void {
   accessToken = token || null;
 }
 
-export function getRefreshToken() {
+export function getRefreshToken(): string | null {
   return safeSession()?.getItem(REFRESH_KEY) ?? null;
 }
 
-export function setRefreshToken(token) {
+export function setRefreshToken(token: string | null | undefined): void {
   const store = safeSession();
   if (!store) return;
   try {
@@ -81,15 +89,18 @@ export function setRefreshToken(token) {
   }
 }
 
-export function getUser() {
+export function getUser(): SessionUser {
   try {
-    return JSON.parse(safeSession()?.getItem(USER_KEY) || '{}');
+    const raw = safeSession()?.getItem(USER_KEY);
+    if (!raw) return {};
+    const parsed = userSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : {};
   } catch {
     return {};
   }
 }
 
-export function setUser(user) {
+export function setUser(user: SessionUser | null | undefined): void {
   const store = safeSession();
   if (!store) return;
   try {
@@ -100,13 +111,13 @@ export function setUser(user) {
   }
 }
 
-export function saveSession({ token, refreshToken, user }) {
-  setAccessToken(token);
-  if (refreshToken !== undefined) setRefreshToken(refreshToken);
-  if (user !== undefined) setUser(user);
+export function saveSession(input: { token?: string | null; refreshToken?: string | null; user?: SessionUser | null }): void {
+  setAccessToken(input.token ?? null);
+  if (input.refreshToken !== undefined) setRefreshToken(input.refreshToken);
+  if (input.user !== undefined) setUser(input.user);
 }
 
-export function clearSession() {
+export function clearSession(): void {
   accessToken = null;
   const store = safeSession();
   try {
@@ -119,7 +130,7 @@ export function clearSession() {
 }
 
 /** True when a refresh is possible without re-entering credentials. */
-export function canResume() {
+export function canResume(): boolean {
   return !!getRefreshToken();
 }
 
@@ -128,11 +139,11 @@ export function canResume() {
 // admin credential, and persisting it would leave a privileged token on disk
 // for the whole impersonation session.
 const ADMIN_USER_KEY = 'adminUser';
-let stashedAdminToken = null;
-let stashedAdminRefresh = null;
+let stashedAdminToken: string | null = null;
+let stashedAdminRefresh: string | null = null;
 
 /** Call before switching into an impersonated session. */
-export function stashAdminSession() {
+export function stashAdminSession(): void {
   stashedAdminToken = getAccessToken();
   stashedAdminRefresh = getRefreshToken();
   const store = safeSession();
@@ -149,12 +160,16 @@ export function stashAdminSession() {
  * restore (e.g. the tab was reloaded mid-impersonation), so the caller can
  * fall back to the login screen.
  */
-export function restoreAdminSession() {
+export function restoreAdminSession(): boolean {
   if (!stashedAdminToken && !stashedAdminRefresh) return false;
   const store = safeSession();
-  let adminUser = {};
+  let adminUser: SessionUser = {};
   try {
-    adminUser = JSON.parse(store?.getItem(ADMIN_USER_KEY) || '{}');
+    const raw = store?.getItem(ADMIN_USER_KEY);
+    if (raw) {
+      const parsed = userSchema.safeParse(JSON.parse(raw));
+      adminUser = parsed.success ? parsed.data : {};
+    }
   } catch {
     adminUser = {};
   }

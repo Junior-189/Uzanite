@@ -1,4 +1,4 @@
-package com.whatsappsaas.app;
+package com.uzanite.app;
 
 import com.getcapacitor.BridgeActivity;
 

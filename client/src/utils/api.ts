@@ -1,9 +1,9 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { getT } from '../context/LangContext';
 import { translateApiMessage } from './translateApiMessage';
 import { clearSession, getAccessToken, getRefreshToken, saveSession, setAccessToken } from './tokenStore';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL: string = (import.meta.env.VITE_API_URL as string) || '/api';
 
 /**
  * Network policy for this client, tuned for the networks it actually runs on.
@@ -25,30 +25,32 @@ const READ_TIMEOUT_MS = 30000;
 const WRITE_TIMEOUT_MS = 20000;
 const MAX_READ_RETRIES = 2;
 
+type RetryConfig = InternalAxiosRequestConfig & { _retried?: boolean; _readAttempts?: number };
+
 const api = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: WRITE_TIMEOUT_MS,
 });
 
-const isReadMethod = (method) => ['get', 'head', 'options'].includes((method || 'get').toLowerCase());
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const isReadMethod = (method?: string): boolean => ['get', 'head', 'options'].includes((method || 'get').toLowerCase());
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Exponential backoff with full jitter, so many clients do not retry in lockstep. */
-const backoffMs = (attempt) => Math.floor(Math.random() * Math.min(500 * 2 ** (attempt - 1), 4000));
+const backoffMs = (attempt: number): number => Math.floor(Math.random() * Math.min(500 * 2 ** (attempt - 1), 4000));
 
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) config.headers.set('Authorization', `Bearer ${token}`);
   if (isReadMethod(config.method) && !config.timeout) config.timeout = READ_TIMEOUT_MS;
   return config;
 });
 
-let refreshing = null;
+let refreshing: Promise<string | null> | null = null;
 
 // Exchanges the stored refresh token for a new access token (single-flight, so
 // a burst of 401s from parallel requests produces exactly one refresh).
-async function refreshSession() {
+async function refreshSession(): Promise<string | null> {
   if (refreshing) return refreshing;
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
@@ -59,7 +61,7 @@ async function refreshSession() {
       const data = res.data;
       if (data?.success && data.token) {
         saveSession({ token: data.token, refreshToken: data.refreshToken ?? refreshToken });
-        return data.token;
+        return data.token as string;
       }
       return null;
     } catch {
@@ -71,7 +73,7 @@ async function refreshSession() {
   return refreshing;
 }
 
-function hardLogout() {
+function hardLogout(): void {
   clearSession();
   // Capacitor has no server-side routing, so a path redirect lands on a blank
   // screen. Previously the native app did nothing at all here and the user was
@@ -92,9 +94,9 @@ api.interceptors.response.use(
     }
     return res.data;
   },
-  async (err) => {
+  async (err: AxiosError) => {
     const status = err.response?.status;
-    const original = err.config || {};
+    const original = (err.config ?? {}) as RetryConfig;
     const url = original.url || '';
 
     // ── Transparently refresh an expired access token once, then retry.
@@ -102,7 +104,7 @@ api.interceptors.response.use(
       const newToken = await refreshSession();
       if (newToken) {
         original._retried = true;
-        original.headers = { ...(original.headers || {}), Authorization: `Bearer ${newToken}` };
+        original.headers.set('Authorization', `Bearer ${newToken}`);
         return api(original);
       }
       hardLogout();
@@ -110,12 +112,14 @@ api.interceptors.response.use(
 
     // ── Rate limited: surface the server's Retry-After so the UI can say when.
     if (status === 429) {
-      const retryAfter = Number(err.response?.headers?.['retry-after']) || undefined;
+      const headers = (err.response?.headers ?? {}) as Record<string, unknown>;
+      const responseData = (err.response?.data ?? {}) as { error?: string };
+      const retryAfter = Number(headers['retry-after']) || undefined;
       return Promise.reject({
         error: 'rate_limited',
         retryAfter,
         message:
-          err.response?.data?.error ||
+          responseData.error ||
           (retryAfter
             ? `Too many requests. Try again in ${retryAfter} second(s).`
             : 'Too many requests. Please slow down.'),
@@ -124,7 +128,7 @@ api.interceptors.response.use(
 
     // ── Retry idempotent reads on transport failures and 5xx.
     const transportFailure = !err.response;
-    const retryableStatus = status >= 500;
+    const retryableStatus = typeof status === 'number' && status >= 500;
     if (isReadMethod(original.method) && (transportFailure || retryableStatus)) {
       original._readAttempts = (original._readAttempts || 0) + 1;
       if (original._readAttempts <= MAX_READ_RETRIES) {
@@ -151,10 +155,10 @@ api.interceptors.response.use(
       });
     }
 
-    const data = err.response?.data || err;
+    const data = (err.response?.data ?? err) as { error?: unknown; [key: string]: unknown };
     if (data.error) {
       try {
-        data.error = translateApiMessage(data.error, getT());
+        data.error = translateApiMessage(data.error as string, getT());
       } catch {
         /* best-effort */
       }

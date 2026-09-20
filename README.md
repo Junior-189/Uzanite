@@ -198,8 +198,8 @@ At least 32 characters and non-placeholder secrets are enforced at boot on both 
 cd platform && bash scripts/ci-local.sh      # needs TEST_DATABASE_URL / TEST_APP_DATABASE_URL / SHADOW_DATABASE_URL / JWT_SECRET
 pnpm test                                    # tests only
 
-# Client
-cd client && npm test && npm run lint
+# Client (TypeScript is adopted incrementally; converted modules are checked)
+cd client && npm run typecheck && npm run lint && npm test
 
 # Legacy (transitional)
 npm test
