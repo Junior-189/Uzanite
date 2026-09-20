@@ -113,6 +113,10 @@ export function AuthProvider({ children }) {
     if (json.pending) {
       return json;
     }
+    // Two-factor: the platform returns a short-lived challenge instead of a session.
+    if (json.mfaRequired) {
+      return { mfaRequired: true, mfaToken: json.mfaToken };
+    }
     if (json.success) {
       await saveAuth(json.token, json.user, json.refreshToken);
       setToken(json.token);
@@ -120,6 +124,22 @@ export function AuthProvider({ children }) {
       return json;
     }
     throw Object.assign(new Error(json.error || 'Login failed'), { lockout: json.lockout, retryAfter: json.retryAfter });
+  }, []);
+
+  const completeMfa = useCallback(async (mfaToken, code) => {
+    const res = await fetch(resolveApiUrl('/auth/login/2fa'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mfaToken, code }),
+    });
+    const json = adaptAuthResponse('/auth/login/2fa', await res.json());
+    if (json.success) {
+      await saveAuth(json.token, json.user, json.refreshToken);
+      setToken(json.token);
+      setUser(json.user);
+      return json;
+    }
+    throw new Error(json.error || 'Invalid authentication code');
   }, []);
 
   const googleLogin = useCallback(async (credential) => {
@@ -231,7 +251,7 @@ export function AuthProvider({ children }) {
   }, [user, token]);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, googleLogin, staffLogin, logout, refreshPermissions, hasPermission, toggleLanguage, hydrated }}>
+    <AuthContext.Provider value={{ user, token, login, completeMfa, googleLogin, staffLogin, logout, refreshPermissions, hasPermission, toggleLanguage, hydrated }}>
       {children}
     </AuthContext.Provider>
   );

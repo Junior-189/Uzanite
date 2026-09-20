@@ -73,7 +73,9 @@ export default function Login() {
   const [registeredName, setRegisteredName] = useState('');
   const [pendingLogin, setPendingLogin] = useState(false);
   const [pendingName, setPendingName] = useState('');
-  const { login, googleLogin, staffLogin } = useAuth();
+  const [mfaToken, setMfaToken] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const { login, completeMfa, googleLogin, staffLogin } = useAuth();
   const [lockoutUntil, setLockoutUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -98,7 +100,23 @@ export default function Login() {
   const navigate = useNavigate();
   const isSw = lang === 'sw';
 
-  const resetForm = () => { setEmail(''); setPassword(''); setConfirmPassword(''); setShowPassword(false); setShowConfirm(false); setName(''); setError(''); };
+  const resetForm = () => { setEmail(''); setPassword(''); setConfirmPassword(''); setShowPassword(false); setShowConfirm(false); setName(''); setError(''); setMfaToken(''); setMfaCode(''); };
+
+  const handleMfa = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await completeMfa(mfaToken, mfaCode.trim());
+      const u = getStoredUser();
+      const isAdminLike = u.role === 'super_admin' || u.role === 'sub_admin';
+      navigate(isAdminLike ? '/admin/adminPanel' : '/admin/dashboard');
+    } catch (err) {
+      setError(err.message || t('login.mfa_invalid'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -106,6 +124,10 @@ export default function Login() {
     setLoading(true);
     try {
       const json = await login(email, password);
+      if (json?.mfaRequired) {
+        setMfaToken(json.mfaToken);
+        return;
+      }
       if (json.pending) {
         setPendingName(json.user?.name || '');
         setPendingLogin(true);
@@ -258,7 +280,7 @@ export default function Login() {
             </div>
 
             {/* Tab bar */}
-            {!registered && !pendingLogin && (
+            {!registered && !pendingLogin && !mfaToken && (
             <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
               {[
                 { key: 'signin', label: t('login.signin_tab') },
@@ -349,8 +371,43 @@ export default function Login() {
               </div>
             )}
 
+            {/* Two-factor code step (platform accounts with TOTP enabled) */}
+            {mfaToken && (
+              <form onSubmit={handleMfa} className="space-y-4 animate-fade-in">
+                <div className="text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto mb-3">
+                    <i className="fas fa-shield-halved text-primary-600 text-xl"></i>
+                  </div>
+                  <h2 className="text-base font-bold text-gray-900">{t('login.mfa_title')}</h2>
+                  <p className="text-sm text-gray-500 mt-1">{t('login.mfa_prompt')}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('login.mfa_code_label')}</label>
+                  <input
+                    type="text" inputMode="numeric" autoComplete="one-time-code" value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value)} required autoFocus maxLength={10}
+                    placeholder="123456"
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-center tracking-[0.3em] text-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-colors"
+                  />
+                </div>
+                <button
+                  type="submit" disabled={loading || mfaCode.trim().length < 6}
+                  className="w-full py-3 rounded-xl bg-primary-600 text-white font-semibold text-sm hover:bg-primary-700 shadow-sm shadow-primary-600/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? t('login.verifying') : t('login.mfa_verify')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMfaToken(''); setMfaCode(''); setError(''); }}
+                  className="w-full text-xs font-medium text-gray-500 hover:text-gray-700"
+                >
+                  {t('login.back')}
+                </button>
+              </form>
+            )}
+
             {/* Sign In */}
-            {!registered && !pendingLogin && tab === 'signin' && (
+            {!registered && !pendingLogin && !mfaToken && tab === 'signin' && (
               <form onSubmit={handleLogin} className="space-y-4 animate-fade-in">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('common.email')}</label>

@@ -3,6 +3,14 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
+import {
+  BUSINESS_PROVIDERS,
+  adaptPlatformTenant,
+  businessProfilePath,
+  normalizeBusiness,
+  paymentMethodPayload,
+  tenantsOnPlatform,
+} from '../utils/tenantBridge';
 import StatusBadge from '../components/StatusBadge';
 import Notifications from './Notifications';
 import RecycleBin from './RecycleBin';
@@ -19,18 +27,12 @@ function BusinessTab({ t }) {
   const fetchBusiness = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/businesses');
-      if (res.success && res.businesses?.length > 0) {
-        const b = res.businesses[0];
-        // Normalize nested payment object into the flat fields the form uses
-        const normalized = {
-          ...b,
-          mpesaNumber: b.payment?.mpesa?.number || '',
-          mpesaName: b.payment?.mpesa?.name || '',
-          tigoNumber: b.payment?.tigo?.number || '',
-          airtelNumber: b.payment?.airtel?.number || '',
-          currency: b.currency || 'TZS',
-        };
+      const res = await api.get(businessProfilePath());
+      const raw = tenantsOnPlatform()
+        ? (res.tenant ? adaptPlatformTenant(res.tenant) : null)
+        : (res.success && res.businesses?.length > 0 ? res.businesses[0] : null);
+      if (raw) {
+        const normalized = normalizeBusiness(raw);
         setBusiness(normalized);
         setForm(normalized);
       }
@@ -40,6 +42,21 @@ function BusinessTab({ t }) {
 
   const handleSave = async () => {
     try {
+      // Platform tenancy: core fields via PUT /tenants/me, payment numbers via
+      // the per-provider upsert endpoint.
+      if (tenantsOnPlatform()) {
+        await api.put('/tenants/me', { name: form.name, phone: form.phone, currency: form.currency });
+        for (const provider of BUSINESS_PROVIDERS) {
+          const number = form[`${provider}Number`];
+          if (number) {
+            await api.post('/tenants/me/payment-methods', paymentMethodPayload(provider, number, form[`${provider}Name`] || ''));
+          }
+        }
+        await fetchBusiness();
+        setEditing(false);
+        showToast(t('business.confirmed_updated'), 'success');
+        return;
+      }
       const res = await api.put(`/businesses/${business.businessId || business._id}`, form);
       if (res.success) {
         const b = res.business || form;

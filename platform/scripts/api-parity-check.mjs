@@ -19,9 +19,13 @@ const LEGACY_BASE = (process.env.LEGACY_BASE || 'http://localhost:3000/api').rep
 const PLATFORM_BASE = (process.env.PLATFORM_BASE || 'http://localhost:4000/api/v1').replace(/\/$/, '');
 const TOKEN = process.env.API_TOKEN || '';
 
-// Read-only endpoints safe to compare. Writes/auth flows are validated manually.
+// Read-only endpoints safe to compare. `legacy`/`platform` may differ in path
+// and shape; `pick` extracts the comparable object from each response.
 const ENDPOINTS = [
-  { name: 'auth/me', path: '/auth/me' },
+  { name: 'auth/me', legacy: '/auth/me', platform: '/auth/me', pick: (j) => j?.user },
+  { name: 'billing/plans', legacy: '/billing/plans', platform: '/billing/plans' },
+  { name: 'billing/status', legacy: '/billing/status', platform: '/billing/status' },
+  { name: 'tenant profile', legacy: '/businesses', platform: '/tenants/me', pick: (j) => (Array.isArray(j?.businesses) ? j.businesses[0] : j?.tenant) },
 ];
 
 function keys(value) {
@@ -61,25 +65,25 @@ async function main() {
   console.log(`Token:    ${TOKEN ? 'set' : 'MISSING (only public endpoints will work)'}\n`);
 
   let mismatches = 0;
-  for (const { name, path } of ENDPOINTS) {
-    const [legacy, platform] = await Promise.all([probe(LEGACY_BASE, path), probe(PLATFORM_BASE, path)]);
-    console.log(`── ${name} (${path}) ─────────────────────────────`);
+  for (const ep of ENDPOINTS) {
+    const [legacy, platform] = await Promise.all([probe(LEGACY_BASE, ep.legacy), probe(PLATFORM_BASE, ep.platform)]);
+    console.log(`── ${ep.name} (legacy ${ep.legacy} ↔ platform ${ep.platform}) ──`);
     line('HTTP status', `legacy=${legacy.status}  platform=${platform.status}`);
 
-    const lk = keys(legacy.json);
-    const pk = keys(platform.json);
-    const top = diff(lk, pk);
+    const top = diff(keys(legacy.json), keys(platform.json));
     line('top-level only legacy', JSON.stringify(top.onlyLegacy));
     line('top-level only platform', JSON.stringify(top.onlyPlatform));
 
-    const lu = keys(legacy.json?.user);
-    const pu = keys(platform.json?.user);
-    const user = diff(lu, pu);
-    line('user keys only legacy', JSON.stringify(user.onlyLegacy));
-    line('user keys only platform', JSON.stringify(user.onlyPlatform));
+    let objOk = true;
+    if (ep.pick) {
+      const obj = diff(keys(ep.pick(legacy.json)), keys(ep.pick(platform.json)));
+      line('object keys only legacy', JSON.stringify(obj.onlyLegacy));
+      line('object keys only platform', JSON.stringify(obj.onlyPlatform));
+      objOk = obj.onlyLegacy.length === 0 && obj.onlyPlatform.length === 0;
+    }
 
-    const ok = legacy.status === 200 && platform.status === 200 && top.onlyLegacy.length === 0 && top.onlyPlatform.length === 0;
-    line('verdict', ok ? '✅ parity (top-level)' : '⚠️  review shape differences above');
+    const ok = legacy.status === 200 && platform.status === 200 && top.onlyLegacy.length === 0 && top.onlyPlatform.length === 0 && objOk;
+    line('verdict', ok ? '✅ parity' : '⚠️  review shape differences above');
     if (!ok) mismatches++;
     console.log('');
   }
