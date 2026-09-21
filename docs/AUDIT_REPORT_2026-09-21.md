@@ -275,3 +275,15 @@ These are **accepted risks / structural work**, not defects, and are tracked her
 - **Replace native `confirm`/`prompt` dialogs** (~20 sites) with in-app modals for embedded-webview reliability.
 - **De-duplicate frontend components** (`FAQAccordion`, `TestimonialCarousel`, `ClickableRow` vs `rowActivate`) and finish i18n for the remaining hardcoded label maps (TopBar/Sidebar/Reports).
 - **PWA PNG/maskable icons** (currently SVG).
+
+
+### Structural pass (third) — completed
+
+- **PII framework**: `pii.ts` (AES-256-GCM + keyed blind index) with unit tests; applied to `Order.customerEmail`/`deliveryLocation`/`deliveryPhone` (encrypted at rest, decrypted on read). `ENCRYPTION_KEY` rotation via `ENCRYPTION_KEYS_PREVIOUS`.
+- **God-object**: extracted `OrderIntakeService` (race-free numbering + server-authoritative item pricing) out of `OrdersService`.
+- **Worker**: single shared Prisma client; Redis leader election for sweeps; outbox dead-letter queue + admin replay.
+- **Frontend**: cursor pagination (Load more) on contacts/expenses/debts/purchases via a reusable hook; in-app confirm/prompt dialogs replacing all native call sites (webview-safe); removed duplicate components; nav labels moved to i18n; self-hosted Font Awesome (dropped the Google Fonts CDN); 192/512 + maskable PNG icons.
+
+### One remaining, decision-gated item
+
+- **Blind-index encryption for *searchable* PII** (`Order.customerName/Phone`, `WhatsAppContact.name/phone/email`, `Staff/User.email`): the framework is in place (`blindIndex`), but switching these columns to ciphertext changes search semantics from substring (`contains`) to exact match. That is a product decision (do operators need partial-name search?). Recommended path: add `*_idx` blind-index columns, move equality lookups (login, contact upsert, order-by-phone) to them, and confirm/drop `contains` search. Deliberately not forced here.
