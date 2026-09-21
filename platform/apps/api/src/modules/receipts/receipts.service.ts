@@ -4,6 +4,7 @@ import { buildReceiptData, ListReceiptsQuery, ReceiptData } from '@uzanite/contr
 import { PrismaService } from '../../prisma/prisma.service';
 import { OutboxService } from '../../outbox/outbox.service';
 import { ReceiptPdfService } from './receipt-pdf.service';
+import { decryptPii } from '../../security/pii';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
 
@@ -95,8 +96,8 @@ export class ReceiptsService {
       customer: {
         name: order.customerName,
         phone: order.customerPhone,
-        email: order.customerEmail,
-        deliveryLocation: order.deliveryLocation,
+        email: decryptPii(order.customerEmail),
+        deliveryLocation: decryptPii(order.deliveryLocation),
       },
       order: {
         id: order.id,
