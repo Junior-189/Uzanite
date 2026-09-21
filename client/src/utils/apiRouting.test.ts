@@ -58,6 +58,8 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/broadcast/contacts')).toBe(true);
     expect(m.isRoutedToPlatform('/whatsapp/status')).toBe(true);
     expect(m.isRoutedToPlatform('/chat/send')).toBe(true);
+    expect(m.isRoutedToPlatform('/privacy/export')).toBe(true);
+    expect(m.isRoutedToPlatform('/privacy/erase')).toBe(true);
     expect(m.isRoutedToPlatform('/staff')).toBe(true);
     expect(m.isRoutedToPlatform('/staff/login')).toBe(true);
     expect(m.isRoutedToPlatform('/admin/users')).toBe(true);
