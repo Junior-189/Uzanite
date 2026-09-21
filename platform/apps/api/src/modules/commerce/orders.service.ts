@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderSource, OrderStatus, Prisma } from '@prisma/client';
-import { CreateOrderInput, ListOrdersQuery } from '@uzanite/contracts';
+import { CreateOrderInput, isAllTimePeriod, ListOrdersQuery } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StockService } from '../catalog/stock.service';
 import { OutboxService } from '../../outbox/outbox.service';
@@ -100,8 +100,8 @@ export class OrdersService {
       where.createdAt = {};
       if (query.from) (where.createdAt as Prisma.DateTimeFilter).gte = new Date(query.from);
       if (query.to) (where.createdAt as Prisma.DateTimeFilter).lte = new Date(query.to);
-    } else if (query.period && query.period !== 'all') {
-      where.createdAt = { gte: this.periodStart(query.period) };
+    } else if (!isAllTimePeriod(query.period)) {
+      where.createdAt = { gte: this.periodStart(query.period as string) };
     }
 
     const page = await paginate<{ id: string }>({
@@ -124,7 +124,7 @@ export class OrdersService {
       start.setUTCDate(start.getUTCDate() - diff);
     } else if (period === 'monthly') {
       start.setUTCDate(1);
-    } else if (period === 'yearly') {
+    } else if (period === 'yearly' || period === 'annually') {
       start.setUTCMonth(0, 1);
     }
     return start;
@@ -221,6 +221,8 @@ export class OrdersService {
   }
 
   async create(tenantId: string, input: CreateOrderInput, actor: string, cash = false) {
+    // Service-level entitlement check: the WhatsApp flow reaches this directly.
+    await this.billing.assertLimit(tenantId, 'ordersPerMonth');
     const clientRef = input.clientRef?.trim() ? input.clientRef.trim() : null;
 
     // Idempotency: a replayed create with the same clientRef returns the original.

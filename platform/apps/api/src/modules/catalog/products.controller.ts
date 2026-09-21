@@ -71,12 +71,14 @@ export class ProductsController {
   @Post()
   @RequirePermission('products')
   @EnforceLimit('products')
+  @UseInterceptors(FileInterceptor('image'))
   create(
     @TenantId() tenantId: string,
     @CurrentUser() principal: Principal,
-    @Body(new ZodValidationPipe(createProductSchema)) body: unknown
+    @Body(new ZodValidationPipe(createProductSchema)) body: unknown,
+    @UploadedFile() image?: { buffer: Buffer; originalname?: string }
   ) {
-    return this.products.create(tenantId, body as never, this.recordedBy(principal));
+    return this.products.create(tenantId, body as never, this.recordedBy(principal), image);
   }
 
   @Put(':id')

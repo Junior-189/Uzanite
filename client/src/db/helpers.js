@@ -134,6 +134,20 @@ export async function deleteOffline(entity, id) {
   await enqueue('delete', entity, id, { _id: id });
 }
 
+/**
+ * Wipes cached tenant data and the offline queue. MUST be called whenever the
+ * authenticated principal changes (login/logout/impersonation) so a shared
+ * device never serves one tenant's cached rows to another.
+ */
+export async function clearTenantData() {
+  const keep = new Set(['settings']);
+  await Promise.all(
+    db.tables
+      .filter((t) => !keep.has(t.name))
+      .map((t) => t.clear().catch(() => { /* best-effort */ }))
+  );
+}
+
 export async function apiAction(path, method = 'POST', body = null) {
   const headers = await getAuthHeaders();
   const opts = { method, headers };

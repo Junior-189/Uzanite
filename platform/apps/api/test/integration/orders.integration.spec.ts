@@ -264,6 +264,24 @@ d('orders integration (Postgres)', () => {
     expect(paid).toHaveLength(1);
   });
 
+  it('does not double-credit a settled cash order when confirm-payment is replayed', async () => {
+    const t = await seedTenant(h, 'ord-cash-settle');
+    const p = await makeProduct(t, 10);
+    const res = await withTenant(t, () => orders.createManual(t, { customerName: 'Walk-in', items: [{ productId: p.id, quantity: 1 }] } as never, 'Owner'));
+
+    // Cash sales post their own ledger credit but create no Payment row.
+    const creditsBefore = await h.prisma.base.ledgerEntry.count({ where: { tenantId: t, refType: 'order', refId: res.order.id, direction: 'credit' } });
+    expect(creditsBefore).toBe(1);
+
+    await expect(
+      withTenant(t, () => payments.confirmManual(t, res.order.id, { method: 'Cash', reference: 'dup' } as never, 'Owner'))
+    ).rejects.toThrow(/already settled/i);
+
+    const creditsAfter = await h.prisma.base.ledgerEntry.count({ where: { tenantId: t, refType: 'order', refId: res.order.id, direction: 'credit' } });
+    expect(creditsAfter).toBe(1);
+    expect(await h.prisma.base.payment.count({ where: { tenantId: t, orderId: res.order.id } })).toBe(0);
+  });
+
   it('isolates orders between tenants', async () => {
     const a = await seedTenant(h, 'ord-j');
     const b = await seedTenant(h, 'ord-k');

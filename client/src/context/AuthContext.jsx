@@ -3,6 +3,7 @@ import api from '../utils/api';
 import { resolveApiUrl } from '../utils/apiRouting';
 import { adaptAuthResponse } from '../utils/platformBridge';
 import db from '../db';
+import { clearTenantData } from '../db/helpers';
 import {
   clearSession,
   getAccessToken,
@@ -118,6 +119,7 @@ export function AuthProvider({ children }) {
       return { mfaRequired: true, mfaToken: json.mfaToken };
     }
     if (json.success) {
+      await clearTenantData();
       await saveAuth(json.token, json.user, json.refreshToken);
       setToken(json.token);
       setUser(json.user);
@@ -134,6 +136,7 @@ export function AuthProvider({ children }) {
     });
     const json = adaptAuthResponse('/auth/login/2fa', await res.json());
     if (json.success) {
+      await clearTenantData();
       await saveAuth(json.token, json.user, json.refreshToken);
       setToken(json.token);
       setUser(json.user);
@@ -151,6 +154,7 @@ export function AuthProvider({ children }) {
     const json = await res.json();
     if (json.pending) return json;
     if (json.success) {
+      await clearTenantData();
       await saveAuth(json.token, json.user, json.refreshToken);
       setToken(json.token);
       setUser(json.user);
@@ -167,6 +171,7 @@ export function AuthProvider({ children }) {
     });
     const json = await res.json();
     if (json.success) {
+      await clearTenantData();
       await saveAuth(json.token, json.user, json.refreshToken);
       setToken(json.token);
       setUser(json.user);
@@ -187,7 +192,7 @@ export function AuthProvider({ children }) {
       } catch { /* best-effort */ }
     }
     await clearAuth();
-    try { await db.dashboardCache.clear(); } catch { /* silent */ }
+    await clearTenantData();
     setToken(null);
     setUser({});
     window.location.hash = '#/admin/login.html';

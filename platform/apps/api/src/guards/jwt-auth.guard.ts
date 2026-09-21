@@ -25,6 +25,9 @@ interface AccessTokenPayload {
   perms?: string[];
   tv?: number;
   act?: string | null;
+  // Challenge tokens (e.g. the 2FA step-up) are short-lived and MUST NOT be
+  // accepted as access tokens. Access tokens never carry a `purpose`.
+  purpose?: string;
 }
 
 @Injectable()
@@ -52,6 +55,12 @@ export class JwtAuthGuard implements CanActivate {
     try {
       payload = await this.keys.verify<AccessTokenPayload>(token);
     } catch {
+      throw new UnauthorizedException('Not authorized, token failed');
+    }
+
+    // A challenge token (currently only `purpose: 'mfa'`) proves a first factor
+    // but is not a session; the dedicated handler verifies it explicitly.
+    if (payload.purpose) {
       throw new UnauthorizedException('Not authorized, token failed');
     }
 

@@ -5,7 +5,11 @@ import { uuid } from './common';
 export const orderStatus = z.enum(['PENDING', 'APPROVED', 'REJECTED', 'PENDING_PAYMENT', 'PAID', 'DELIVERED']);
 export const orderSource = z.enum(['whatsapp', 'cash']);
 
-export const orderPeriod = z.enum(['daily', 'weekly', 'monthly', 'yearly', 'all']);
+// `annually`/`alltime` are legacy client spellings accepted as aliases of
+// `yearly`/`all` (the SPA's PeriodFilter sends these).
+export const orderPeriod = z.enum(['daily', 'weekly', 'monthly', 'yearly', 'annually', 'all', 'alltime']);
+
+export const isAllTimePeriod = (period: string | undefined): boolean => !period || period === 'all' || period === 'alltime';
 
 const optionalEmail = z.union([z.string().trim().email('Invalid email'), z.literal('')]).optional().default('');
 

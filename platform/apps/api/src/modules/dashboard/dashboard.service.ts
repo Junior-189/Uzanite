@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { DashboardQuery } from '@uzanite/contracts';
+import { DashboardQuery, isAllTimePeriod } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface DashboardStats {
@@ -34,7 +34,7 @@ export class DashboardService {
       start.setUTCDate(start.getUTCDate() - diff);
     } else if (period === 'monthly') {
       start.setUTCDate(1);
-    } else if (period === 'yearly') {
+    } else if (period === 'yearly' || period === 'annually') {
       start.setUTCMonth(0, 1);
     }
     return start;
@@ -42,8 +42,8 @@ export class DashboardService {
 
   async stats(tenantId: string, query: DashboardQuery): Promise<{ success: true; stats: DashboardStats }> {
     const where: Prisma.OrderWhereInput = { tenantId, deletedAt: null };
-    if (query.period && query.period !== 'all') {
-      where.createdAt = { gte: this.periodStart(query.period) };
+    if (!isAllTimePeriod(query.period)) {
+      where.createdAt = { gte: this.periodStart(query.period as string) };
     }
 
     const [orders, totalProducts] = await Promise.all([

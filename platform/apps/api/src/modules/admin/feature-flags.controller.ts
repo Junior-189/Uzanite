@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   featureFlagsTenantParam,
@@ -6,6 +6,7 @@ import {
   featureFlagsUpdateSchema,
 } from '@uzanite/contracts';
 import { CurrentUser } from '../../decorators/principal.decorator';
+import { AdminMfaGuard } from '../../guards/admin-mfa.guard';
 import { RateLimit } from '../../decorators/rate-limit.decorator';
 import { Principal } from '../../context/tenant-context';
 import { ZodValidationPipe } from '../../pipes/zod-validation.pipe';
@@ -30,12 +31,14 @@ export class FeatureFlagsController {
   }
 
   // Admin: global flags (+ tenant overrides when `tenantId` is supplied).
+  @UseGuards(AdminMfaGuard)
   @Get()
   list(@CurrentUser() principal: Principal, @Query(new ZodValidationPipe(featureFlagsTenantQuery)) query: { tenantId?: string }) {
     assertPlatformAdmin(principal);
     return this.flags.listForAdmin(query.tenantId);
   }
 
+  @UseGuards(AdminMfaGuard)
   @Put()
   updateGlobal(
     @CurrentUser() principal: Principal,
@@ -45,6 +48,7 @@ export class FeatureFlagsController {
     return this.flags.updateGlobal(body as never);
   }
 
+  @UseGuards(AdminMfaGuard)
   @Put(':tenantId')
   updateTenant(
     @CurrentUser() principal: Principal,
@@ -55,6 +59,7 @@ export class FeatureFlagsController {
     return this.flags.updateTenant(params.tenantId, body as never);
   }
 
+  @UseGuards(AdminMfaGuard)
   @Delete(':tenantId')
   resetTenant(
     @CurrentUser() principal: Principal,

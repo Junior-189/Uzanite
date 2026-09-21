@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AdjustStockInput,
@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { StockService } from './stock.service';
 import { LocalStorageService } from '../../storage/local-storage.service';
+import { BillingService } from '../billing/billing.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
 
@@ -51,7 +52,9 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stock: StockService,
-    private readonly storage: LocalStorageService
+    private readonly storage: LocalStorageService,
+    // Optional so unit/integration constructions without entitlements still work.
+    private readonly billing?: BillingService
   ) {}
 
   private async getOrThrow(tenantId: string, id: string) {
@@ -134,6 +137,12 @@ export class ProductsService {
     const rows = parseCsv(buffer.toString('utf8'));
     const errors: Array<{ row: number; error: string }> = [];
     if (rows.length < 2) return { success: true, created: 0, skipped: 0, errors, message: 'No rows found' };
+    // Bound a single import and reserve the entitlement for the whole batch.
+    const MAX_IMPORT_ROWS = 1000;
+    if (rows.length - 1 > MAX_IMPORT_ROWS) {
+      throw new BadRequestException(`A single import is limited to ${MAX_IMPORT_ROWS} rows`);
+    }
+    await this.billing?.assertLimit(tenantId, 'products', rows.length - 1);
 
     const header = rows[0].map((h) => h.trim().toLowerCase());
     const col = (...aliases: string[]) => {
@@ -186,8 +195,22 @@ export class ProductsService {
     return { success: true, created, skipped, errors, message: `Imported ${created} product(s), skipped ${skipped}.` };
   }
 
-  async create(tenantId: string, input: CreateProductInput, recordedBy: string) {
+  private async storeImage(tenantId: string, file: { buffer: Buffer; originalname?: string }): Promise<string> {
+    const ext = (file.originalname?.split('.').pop() || 'bin').toLowerCase();
+    const key = LocalStorageService.newKey(tenantId, ext);
+    await this.storage.put(key, file.buffer);
+    return key;
+  }
+
+  async create(
+    tenantId: string,
+    input: CreateProductInput,
+    recordedBy: string,
+    image?: { buffer: Buffer; originalname?: string }
+  ) {
+    await this.billing?.assertLimit(tenantId, 'products');
     const initialStock = input.stock ?? 0;
+    const imageKey = image ? await this.storeImage(tenantId, image) : input.imageKey ? input.imageKey : null;
     let productId: string;
     try {
       productId = await this.prisma.transaction(async () => {
@@ -206,9 +229,10 @@ export class ProductsService {
             lowStockThreshold: input.lowStockThreshold ?? 5,
             expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
             expiryWarnDays: input.expiryWarnDays ?? 7,
-            imageKey: input.imageKey ? input.imageKey : null,
+            imageKey,
             categoryId: await this.resolveCategoryId(tenantId, input.categoryId),
-            recordedBy: input.recordedBy || recordedBy,
+            // The actor is server-derived; a client-supplied `recordedBy` is ignored.
+            recordedBy,
           },
         });
         // Initial stock is recorded as an append-only movement in the same tx.

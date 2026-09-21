@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import {
@@ -190,6 +190,21 @@ export class BillingService {
     if (limit === -1) return { allowed: true, current: status.usage?.[metric] ?? 0, limit: -1, metric };
     const current = status.usage?.[metric] ?? 0;
     return { allowed: current < limit, current, limit, metric };
+  }
+
+  /**
+   * Service-level entitlement guard. HTTP `@EnforceLimit` only protects routes;
+   * flows (WhatsApp) and bulk endpoints reach services directly. `willAdd`
+   * lets callers reserve N rows at once (e.g. CSV import).
+   */
+  async assertLimit(tenantId: string, metric: string, willAdd = 1): Promise<void> {
+    const check = await this.checkLimit(tenantId, metric);
+    if (check.limit === -1) return;
+    if (check.current + willAdd > check.limit) {
+      throw new ConflictException(
+        `Your plan allows ${check.limit} ${metric} and you already have ${check.current}. Upgrade to add more.`
+      );
+    }
   }
 
   /**

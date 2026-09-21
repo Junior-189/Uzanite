@@ -208,13 +208,23 @@ export class PaymentsService {
     const paymentId = await this.prisma.transaction(async () => {
       const order = await this.getOrderOrThrow(tenantId, orderId);
 
-      // Idempotency: an already-settled order returns (or backfills) its payment.
+      // Idempotency: an already-settled order returns its payment.
       if (order.status === 'PAID' || order.status === 'DELIVERED') {
         const settled = await this.prisma.db.payment.findFirst({
           where: { tenantId, orderId, status: 'succeeded' },
           orderBy: { createdAt: 'desc' },
         });
         if (settled) return { id: settled.id, idempotent: true };
+
+        // Cash/POS orders settle at creation with a `cash_sale` ledger credit
+        // and no Payment row. Crediting again here would double-count revenue.
+        const orderCredit = await this.prisma.db.ledgerEntry.findFirst({
+          where: { tenantId, refType: 'order', refId: orderId, direction: 'credit' },
+          select: { id: true },
+        });
+        if (orderCredit) {
+          throw new ConflictException('Order is already settled; no manual payment is required.');
+        }
       }
 
       const idempotencyKey = `order:${orderId}:manual:${input.reference}`;
