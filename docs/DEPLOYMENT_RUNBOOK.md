@@ -89,7 +89,7 @@ Copy `platform/.env.example` → `platform/.env` and populate. Canonical variabl
 | `JWT_SECRET` | yes | ≥32 chars, `openssl rand -hex 32`; shared with legacy during cutover |
 | `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL_DAYS` | recommended | Session lifetimes |
 | `JWT_KEYS` / `JWT_ACTIVE_KID` | optional | `kid`-based key rotation (zero-downtime) |
-| `ENCRYPTION_KEY` | yes | Encrypts per-tenant Meta tokens; **not recoverable from a DB backup** |
+| `ENCRYPTION_KEY` | yes | Encrypts per-tenant Meta tokens; **not recoverable from a DB backup**. Rotate by promoting a new key and listing old ones in `ENCRYPTION_KEYS_PREVIOUS` (decrypt-only) |
 
 ### 4.3 Database guard rails & proxy
 
