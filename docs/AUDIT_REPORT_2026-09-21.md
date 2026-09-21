@@ -284,10 +284,15 @@ These are **accepted risks / structural work**, not defects, and are tracked her
 - **Worker**: single shared Prisma client; Redis leader election for sweeps; outbox dead-letter queue + admin replay.
 - **Frontend**: cursor pagination (Load more) on contacts/expenses/debts/purchases via a reusable hook; in-app confirm/prompt dialogs replacing all native call sites (webview-safe); removed duplicate components; nav labels moved to i18n; self-hosted Font Awesome (dropped the Google Fonts CDN); 192/512 + maskable PNG icons.
 
-### Blind-index PII rollout (fourth pass)
+### Blind-index PII rollout (fourth pass) — complete
 
-- **Order PII done and tested**: `customerName`/`customerPhone` encrypted at rest; `customerPhoneIdx` blind index (migration 0030) backs the equality phone filter; decrypt-on-read across serialize/receipts/reports/payments/conversation; idempotent `migrate:pii-orders` backfill.
-- **Same pattern, remaining entities** (recommended as separate staged changes because they are core keys):
-  - `WhatsAppContact.phone/name/email` — phone is the business key (unique upsert) used by messaging, webhook, conversation, chat, broadcast; needs `phoneIdx` + switching the unique constraint and all lookups.
-  - `Staff.email` / `User.email` — login/identity keys (exact lookups) plus unique constraints; needs `emailIdx` and a touch to register/login/reset/invite.
-  Each follows the Order template: add `*_idx` column + migration, encrypt on write + set index, decrypt on read, switch equality lookups to the index, and run a backfill.
+Encrypted at rest with a keyed blind index for equality lookups, decrypt-on-read, legacy-plaintext fallback during rollout, an idempotent backfill, and tests — applied to:
+
+- **Order**: `customerName`, `customerPhone` (+ `customerPhoneIdx`), `customerEmail`/delivery fields.
+- **WhatsAppContact**: `phone` (+ `phoneIdx`), `name`, `email`.
+- **Staff**: `email` (+ `emailIdx`).
+- **User** (auth core): `email` (+ `emailIdx`).
+
+Backfills: `migrate:pii-orders`, `migrate:pii-contacts`, `migrate:pii-staff`, `migrate:pii-users`.
+
+**Remaining plaintext PII surfaces (tracked, lower exposure):** `Message.contactPhone`/`text` (bodies are redactable via retention), `LoginAttempt.email`/IP, `MembershipInvite.email`, and `Tenant.phone`. These are audit/queue records without substring-search requirements and can follow the same pattern.
