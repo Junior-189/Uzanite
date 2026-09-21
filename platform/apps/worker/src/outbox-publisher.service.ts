@@ -1,5 +1,9 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Queue } from 'bullmq';
+import Redis from 'ioredis';
 import { PrismaClient } from '@prisma/client';
+import { workerPrisma } from './prisma-client';
 import { OutboxDispatcherService } from './consumers/outbox-dispatcher.service';
 import { WorkerErrorTracker } from './error-tracker.service';
 
@@ -23,14 +27,26 @@ const LEASE_MS = 5 * 60 * 1000;
 @Injectable()
 export class OutboxPublisherService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(OutboxPublisherService.name);
-  private readonly prisma = new PrismaClient();
+  private readonly prisma = workerPrisma;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
+  private dlq: Queue | null = null;
+
   constructor(
     private readonly dispatcher: OutboxDispatcherService,
-    private readonly tracker?: WorkerErrorTracker
+    private readonly tracker?: WorkerErrorTracker,
+    private readonly config?: ConfigService
   ) {}
+
+  /** Lazily connects the dead-letter queue (only when Redis is configured). */
+  private getDlq(): Queue | null {
+    if (this.dlq) return this.dlq;
+    const url = this.config?.get<string>('REDIS_URL');
+    if (!url) return null;
+    this.dlq = new Queue('dlq', { connection: new Redis(url, { maxRetriesPerRequest: null }) });
+    return this.dlq;
+  }
 
   async onApplicationBootstrap(): Promise<void> {
     await this.prisma.$connect();
@@ -123,7 +139,17 @@ export class OutboxPublisherService implements OnApplicationBootstrap, OnApplica
       const nextAttempts = attempts + 1;
       const failed = nextAttempts >= MAX_ATTEMPTS;
       this.logger.error(`Outbox event ${id} (${type}) failed (attempt ${nextAttempts}): ${(err as Error).message}`);
-      if (failed) this.tracker?.capture(err, { eventId: id, type, tenantId, attempts: nextAttempts });
+      if (failed) {
+        this.tracker?.capture(err, { eventId: id, type, tenantId, attempts: nextAttempts });
+        // Surface the exhausted event on the operator dead-letter queue so it
+        // can be replayed (admin/queues/dead-letters) rather than only logged.
+        const dlq = this.getDlq();
+        if (dlq) {
+          await dlq
+            .add('dead-letter', { eventId: id, type, tenantId, error: (err as Error).message }, { removeOnFail: false })
+            .catch(() => undefined);
+        }
+      }
       await this.prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', true)`;
         await tx.outboxEvent.update({

@@ -1,3 +1,4 @@
+import { workerPrisma } from '../prisma-client';
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { InteractiveReply, MetaApiError, MetaClient, normalizeRecipient, tryDecrypt } from '@uzanite/messaging';
@@ -27,7 +28,7 @@ type SendOutcome = { status: string; error?: string };
 @Injectable()
 export class WhatsAppOutboundService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(WhatsAppOutboundService.name);
-  private readonly prisma = new PrismaClient();
+  private readonly prisma = workerPrisma;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 

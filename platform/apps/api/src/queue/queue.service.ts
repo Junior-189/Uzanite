@@ -80,6 +80,23 @@ export class QueueService implements OnModuleDestroy {
     }));
   }
 
+  /** Fetch a dead-letter job (for admin replay). */
+  async getDeadLetter(id: string): Promise<{ id: string; data: Record<string, unknown> } | null> {
+    if (!this.connection) return null;
+    const queue = this.getQueue('dlq');
+    const job = queue ? await queue.getJob(id) : null;
+    if (!job) return null;
+    return { id: String(job.id), data: (job.data ?? {}) as Record<string, unknown> };
+  }
+
+  /** Remove a dead-letter job after it has been replayed. */
+  async removeDeadLetter(id: string): Promise<void> {
+    if (!this.connection) return;
+    const queue = this.getQueue('dlq');
+    const job = queue ? await queue.getJob(id) : null;
+    if (job) await job.remove();
+  }
+
   async onModuleDestroy(): Promise<void> {
     for (const q of this.queues.values()) {
       try {
