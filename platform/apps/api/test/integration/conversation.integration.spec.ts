@@ -92,7 +92,7 @@ d('conversation flows (Postgres)', () => {
   // Text of a reply: plain text messages use `text`; interactive use raw.body.
   async function outboundText(tenantId: string) {
     return (await outbound(tenantId))
-      .map((m) => m.text || ((m.raw as { body?: string } | null)?.body ?? ''))
+      .map((m) => decryptPii(m.text) || ((m.raw as { body?: string } | null)?.body ?? ''))
       .join(' ');
   }
 

@@ -1,7 +1,7 @@
 import { workerPrisma } from '../prisma-client';
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { InteractiveReply, MetaApiError, MetaClient, normalizeRecipient, tryDecrypt } from '@uzanite/messaging';
+import { InteractiveReply, MetaApiError, MetaClient, blindIndex, encrypt, normalizeRecipient, tryDecrypt } from '@uzanite/messaging';
 import { randomUUID } from 'crypto';
 
 const POLL_MS = 10000;
@@ -105,9 +105,10 @@ export class WhatsAppOutboundService implements OnApplicationBootstrap, OnApplic
           id,
           tenantId: input.tenantId,
           direction: 'outbound',
-          contactPhone: normalizeRecipient(input.to),
+          contactPhone: encrypt(normalizeRecipient(input.to)),
+          contactPhoneIdx: blindIndex(normalizeRecipient(input.to)),
           messageType: input.messageType ?? (input.templateName ? 'template' : 'text'),
-          text: input.text ?? '',
+          text: encrypt(input.text ?? ''),
           templateName: input.templateName ?? null,
           status: 'queued',
           idempotencyKey,
@@ -161,19 +162,24 @@ export class WhatsAppOutboundService implements OnApplicationBootstrap, OnApplic
       kind?: string;
     };
 
+    // PII is encrypted at rest; decrypt for the provider call (legacy plaintext
+    // rows pass through tryDecrypt unchanged).
+    const to = tryDecrypt(message.contactPhone).value ?? message.contactPhone;
+    const body = tryDecrypt(message.text).value ?? message.text;
+
     // ── Step 2: network I/O — NO database transaction is held here. ───────────
     try {
       let result;
       if (message.messageType === 'interactive') {
-        result = await this.meta.sendInteractive(creds, message.contactPhone, raw as unknown as InteractiveReply);
+        result = await this.meta.sendInteractive(creds, to, raw as unknown as InteractiveReply);
       } else if (message.templateName) {
-        result = await this.meta.sendTemplate(creds, message.contactPhone, {
+        result = await this.meta.sendTemplate(creds, to, {
           name: message.templateName,
           language: raw.language,
           components: raw.components,
         });
       } else if (message.messageType !== 'text') {
-        result = await this.meta.sendMedia(creds, message.contactPhone, {
+        result = await this.meta.sendMedia(creds, to, {
           type: (raw.type as 'image' | 'document' | 'audio' | 'video' | undefined) ?? 'image',
           link: raw.link,
           id: message.mediaId ?? undefined,
@@ -181,7 +187,7 @@ export class WhatsAppOutboundService implements OnApplicationBootstrap, OnApplic
           filename: raw.filename,
         });
       } else {
-        result = await this.meta.sendText(creds, message.contactPhone, message.text);
+        result = await this.meta.sendText(creds, to, body);
       }
 
       // ── Step 3: persist the outcome in a short transaction. ────────────────
@@ -201,7 +207,7 @@ export class WhatsAppOutboundService implements OnApplicationBootstrap, OnApplic
         });
         await tx.whatsAppAccount.update({ where: { id: account.id }, data: { status: 'connected', lastError: '' } });
       });
-      this.logger.log(`Sent WhatsApp message ${id} -> ${message.contactPhone}`);
+      this.logger.log(`Sent WhatsApp message ${id} -> ${to}`);
       return { status: 'sent' };
     } catch (err) {
       const permanent = err instanceof MetaApiError ? err.permanent : false;

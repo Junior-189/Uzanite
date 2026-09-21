@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { blindIndex, decryptPii } from '../../src/security/pii';
+import { isEncrypted } from '@uzanite/messaging';
 import { randomUUID } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { MetaClient } from '@uzanite/messaging';
@@ -120,7 +121,11 @@ d('messaging (WhatsApp Cloud) integration (Postgres)', () => {
     const messages = await h.prisma.base.message.findMany({ where: { tenantId, direction: 'inbound' } });
     expect(messages).toHaveLength(1);
     expect(messages[0].providerMessageId).toBe('wamid.IN-1');
-    expect(messages[0].text).toBe('Hello there');
+    expect(decryptPii(messages[0].text)).toBe('Hello there');
+    // Encrypted at rest, with a phone blind index for thread lookups.
+    expect(isEncrypted(messages[0].text)).toBe(true);
+    expect(isEncrypted(messages[0].contactPhone)).toBe(true);
+    expect(messages[0].contactPhoneIdx).toBe(blindIndex('255700111222'));
 
     const events = await h.prisma.base.outboxEvent.findMany({ where: { tenantId, type: 'whatsapp.inbound' } });
     expect(events).toHaveLength(1);

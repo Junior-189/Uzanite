@@ -64,7 +64,7 @@ export class StaffService {
   private async recordAttempt(email: string, status: string, reason: string, meta: StaffRequestMeta) {
     await runAsSystem(() =>
       this.prisma.db.loginAttempt.create({
-        data: { email, userId: null, status, reason, ip: meta.ip, userAgent: meta.userAgent },
+        data: { email: encryptPii(email) ?? '', emailIdx: blindIndex(email), userId: null, status, reason, ip: meta.ip, userAgent: meta.userAgent },
       })
     );
   }

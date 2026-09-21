@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { UpsertPaymentMethodInput, UpdateTenantInput } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { newId } from '../../ids/id';
+import { decryptPii, encryptPii } from '../../security/pii';
 
 @Injectable()
 export class TenantsService {
@@ -13,7 +14,7 @@ export class TenantsService {
       include: { settings: true, paymentMethods: true },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
-    return { success: true, tenant };
+    return { success: true, tenant: { ...tenant, phone: tenant.phone ? decryptPii(tenant.phone) : null } };
   }
 
   async update(tenantId: string, input: UpdateTenantInput) {
@@ -24,7 +25,7 @@ export class TenantsService {
       where: { id: tenantId },
       data: {
         name: input.name ?? undefined,
-        phone: input.phone ?? undefined,
+        phone: input.phone !== undefined ? (input.phone ? encryptPii(input.phone) : null) : undefined,
         currency: input.currency ?? undefined,
         timezone: input.timezone ?? undefined,
       },
@@ -37,7 +38,7 @@ export class TenantsService {
         create: { tenantId, theme: input.theme },
       });
     }
-    return { success: true, tenant: updated };
+    return { success: true, tenant: { ...updated, phone: updated.phone ? decryptPii(updated.phone) : null } };
   }
 
   async listPaymentMethods(tenantId: string) {

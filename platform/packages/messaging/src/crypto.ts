@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto';
 
 // AES-256-GCM for secrets at rest (per-tenant Meta access tokens / verify tokens).
 // Format: `v1.<iv-b64>.<tag-b64>.<ciphertext-b64>`. Key from ENCRYPTION_KEY
@@ -103,6 +103,18 @@ export function tryDecrypt(payload: string): { value: string | null; error: Decr
 
 export function isEncrypted(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('v1.');
+}
+
+/**
+ * Keyed HMAC blind index for equality lookups on encrypted PII. Deterministic,
+ * one-way, and domain-separated by a dedicated key (falls back to
+ * ENCRYPTION_KEY). Shared by the API and worker so indexes always agree.
+ */
+export function blindIndex(value: string): string {
+  const secret = process.env.PII_INDEX_KEY || process.env.ENCRYPTION_KEY || '';
+  if (!secret) throw new Error('PII_INDEX_KEY (or ENCRYPTION_KEY) is required for blind indexes');
+  const key = createHmac('sha256', secret).update('pii-index-v1').digest();
+  return createHmac('sha256', key).update(value.trim().toLowerCase()).digest('hex');
 }
 
 export function sha256(value: string): string {

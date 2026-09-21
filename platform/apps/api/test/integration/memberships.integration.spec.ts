@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { blindIndex } from '../../src/security/pii';
+import { isEncrypted } from '@uzanite/messaging';
 import { MembershipsService } from '../../src/modules/tenancy/memberships.service';
 import { UnitOfWorkService } from '../../src/prisma/unit-of-work.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
@@ -136,5 +137,16 @@ d('memberships (staff foundation, Postgres)', () => {
     await expect(members.acceptInvite({ token, name: 'X', password: 'Str0ng!Passw0rd' } as never)).rejects.toThrow(
       /Invalid or expired/
     );
+  });
+
+  it('encrypts the invite email at rest with a blind index', async () => {
+    const { tenantId, ownerId } = await seedTenant('inv-pii');
+    const res = await withTenant(tenantId, () =>
+      members.invite(tenantId, { email: 'invitee@x.com', role: 'staff' } as never, ownerActor(ownerId))
+    );
+    expect(res.invite.email).toBe('invitee@x.com');
+    const raw = await h.prisma.base.membershipInvite.findFirst({ where: { tenantId, emailIdx: blindIndex('invitee@x.com') } });
+    expect(raw).toBeTruthy();
+    expect(isEncrypted(raw!.email)).toBe(true);
   });
 });

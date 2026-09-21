@@ -1,5 +1,4 @@
-import { createHmac } from 'crypto';
-import { decrypt, encrypt, isEncrypted } from '@uzanite/messaging';
+import { blindIndex as sharedBlindIndex, decrypt, encrypt, isEncrypted } from '@uzanite/messaging';
 
 /**
  * PII storage helpers.
@@ -14,20 +13,12 @@ import { decrypt, encrypt, isEncrypted } from '@uzanite/messaging';
  * Reads tolerate legacy plaintext rows (`decryptPii` passes non-envelopes
  * through) so a column can be encrypted during a rolling rollout.
  */
-function indexKey(): Buffer {
-  const secret = process.env.PII_INDEX_KEY || process.env.ENCRYPTION_KEY || '';
-  if (!secret) throw new Error('PII_INDEX_KEY (or ENCRYPTION_KEY) is required for blind indexes');
-  return createHmac('sha256', secret).update('pii-index-v1').digest();
-}
-
 /** Case/whitespace-insensitive normalisation before indexing. */
 export function normalizePii(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function blindIndex(value: string): string {
-  return createHmac('sha256', indexKey()).update(normalizePii(value)).digest('hex');
-}
+export const blindIndex = sharedBlindIndex;
 
 export function encryptPii(value?: string | null): string | null {
   if (value === undefined || value === null || value === '') return null;

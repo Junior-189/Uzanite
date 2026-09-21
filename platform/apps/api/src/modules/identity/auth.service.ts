@@ -44,7 +44,7 @@ export class AuthService {
     meta: RequestMeta
   ): Promise<void> {
     await this.prisma.db.loginAttempt.create({
-      data: { email, userId, status, reason, ip: meta.ip, userAgent: meta.userAgent },
+      data: { email: encryptPii(email) ?? '', emailIdx: blindIndex(email), userId, status, reason, ip: meta.ip, userAgent: meta.userAgent },
     });
   }
 

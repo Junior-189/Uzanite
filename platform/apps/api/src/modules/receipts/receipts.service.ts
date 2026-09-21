@@ -92,7 +92,7 @@ export class ReceiptsService {
     const receiptNumber = `RCP-${order.orderNumber}`;
     const data = buildReceiptData({
       receiptNumber,
-      business: { name: order.tenant.name, phone: order.tenant.phone, currency: order.tenant.currency },
+      business: { name: order.tenant.name, phone: order.tenant.phone ? decryptPii(order.tenant.phone) : null, currency: order.tenant.currency },
       customer: {
         name: decryptPii(order.customerName),
         phone: decryptPii(order.customerPhone),

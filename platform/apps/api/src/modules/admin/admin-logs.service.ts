@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ActivityLogsQuery, LoginAttemptsQuery } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { runAsSystem } from '../../context/tenant-context';
-import { decryptPii } from '../../security/pii';
+import { blindIndex, decryptPii } from '../../security/pii';
 
 function dateRange(startDate?: string, endDate?: string): { gte?: Date; lte?: Date } | undefined {
   const range: { gte?: Date; lte?: Date } = {};
@@ -127,7 +127,7 @@ export class AdminLogsService {
   async loginAttempts(query: LoginAttemptsQuery) {
     const where: Record<string, unknown> = {};
     if (query.status) where.status = query.status;
-    if (query.email) where.email = { contains: query.email, mode: 'insensitive' };
+    if (query.email) where.emailIdx = blindIndex(query.email.toLowerCase());
     const range = dateRange(query.startDate, query.endDate);
     if (range) where.createdAt = range;
 
@@ -143,7 +143,7 @@ export class AdminLogsService {
       const user = r.userId ? users.get(r.userId) : undefined;
       return {
         _id: String(r.id),
-        email: r.email ?? '',
+        email: decryptPii(r.email),
         userName: user?.name ?? '',
         role: user?.role ?? '',
         status: r.status,
@@ -167,12 +167,11 @@ export class AdminLogsService {
         this.prisma.db.loginAttempt.count({ where: { createdAt: { gte: startOfToday } } }),
         this.prisma.db.loginAttempt.groupBy({ by: ['status'], _count: { _all: true } }),
         this.prisma.db.loginAttempt.findMany({ orderBy: { createdAt: 'desc' }, take: 20 }),
-        this.prisma.db.loginAttempt.groupBy({
-          by: ['email'],
+        this.prisma.db.loginAttempt.findMany({
           where: { status: 'failed' },
-          _count: { _all: true },
-          orderBy: { _count: { email: 'desc' } },
-          take: 10,
+          select: { email: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1000,
         }),
       ])
     );
@@ -184,13 +183,20 @@ export class AdminLogsService {
       statusBreakdown: groupToCounts(statusBreakdown as never, 'status'),
       recentAttempts: recent.map((r) => ({
         _id: String(r.id),
-        email: r.email ?? '',
+        email: decryptPii(r.email),
         userName: r.userId ? users.get(r.userId)?.name ?? '' : '',
         status: r.status,
         reason: r.reason ?? '',
         createdAt: r.createdAt,
       })),
-      failedEmails: groupToCounts(failed as never, 'email'),
+      failedEmails: (() => {
+        const counts = new Map<string, number>();
+        for (const f of failed as Array<{ email: string | null }>) {
+          const key = decryptPii(f.email) || '—';
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([_id, count]) => ({ _id, count }));
+      })(),
     };
   }
 }

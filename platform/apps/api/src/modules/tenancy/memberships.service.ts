@@ -228,7 +228,8 @@ export class MembershipsService {
       data: {
         id: newId(),
         tenantId,
-        email: input.email,
+        email: encryptPii(input.email) ?? '',
+        emailIdx: blindIndex(input.email),
         role: input.role,
         permissions,
         tokenHash: sha256(rawToken),
@@ -252,7 +253,7 @@ export class MembershipsService {
     });
     await this.log(tenantId, actor, 'member.invited', input.email);
 
-    return { success: true, invite: { email: invite.email, role: invite.role, expiresAt: invite.expiresAt } };
+    return { success: true, invite: { email: decryptPii(invite.email), role: invite.role, expiresAt: invite.expiresAt } };
   }
 
   /** Consumes an invitation: creates the user (if new) and the membership. */
@@ -267,13 +268,14 @@ export class MembershipsService {
           throw new UnauthorizedException('Invalid or expired invitation');
         }
 
-        let user = await this.prisma.db.user.findFirst({ where: { deletedAt: null, OR: [{ emailIdx: blindIndex(invite.email) }, { email: invite.email }] } });
+        const inviteEmail = decryptPii(invite.email);
+        let user = await this.prisma.db.user.findFirst({ where: { deletedAt: null, OR: [{ emailIdx: blindIndex(inviteEmail) }, { email: inviteEmail }] } });
         if (!user) {
           user = await this.prisma.db.user.create({
             data: {
               id: newId(),
-              email: encryptPii(invite.email) ?? '',
-              emailIdx: blindIndex(invite.email),
+              email: encryptPii(inviteEmail) ?? '',
+              emailIdx: blindIndex(inviteEmail),
               name: input.name,
               passwordHash: await hashPassword(input.password),
               status: 'active',

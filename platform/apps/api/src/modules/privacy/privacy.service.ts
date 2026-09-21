@@ -90,7 +90,7 @@ export class PrivacyService {
       }),
       phone
         ? this.prisma.db.message.findMany({
-            where: { tenantId, contactPhone: phone },
+            where: { tenantId, contactPhoneIdx: blindIndex(phone) },
             orderBy: { createdAt: 'desc' },
             take: 5000,
           })
@@ -116,7 +116,11 @@ export class PrivacyService {
       tenant,
       contacts,
       orders,
-      messages,
+      messages: (messages as Array<{ text?: string; contactPhone?: string }>).map((m) => ({
+        ...m,
+        text: decryptPii(m.text),
+        contactPhone: decryptPii(m.contactPhone),
+      })),
       privacyRequests: consents,
     };
   }
@@ -135,7 +139,9 @@ export class PrivacyService {
       // aggregate counts stay consistent.
       if (phone || email) {
         const contacts = await this.prisma.db.whatsAppContact.updateMany({
-          where: { tenantId, ...(phone ? { phone } : { email }) },
+          where: phone
+            ? { tenantId, OR: [{ phoneIdx: blindIndex(phone) }, { phone }] }
+            : { tenantId, email },
           data: {
             name: '[erased]',
             email: '',
@@ -153,7 +159,7 @@ export class PrivacyService {
       // Message bodies are personal data; the delivery metadata is not.
       if (phone) {
         const messages = await this.prisma.db.message.updateMany({
-          where: { tenantId, contactPhone: phone },
+          where: { tenantId, contactPhoneIdx: blindIndex(phone) },
           data: { text: '[erased]' },
         });
         results.messages = messages.count;
@@ -161,10 +167,13 @@ export class PrivacyService {
 
       // Orders keep their financial shape; the customer identity is removed.
       const orders = await this.prisma.db.order.updateMany({
-        where: { tenantId, ...(phone ? { customerPhone: phone } : { customerEmail: email }) },
+        where: phone
+          ? { tenantId, OR: [{ customerPhoneIdx: blindIndex(phone) }, { customerPhone: phone }] }
+          : { tenantId, customerEmail: email },
         data: {
           customerName: '[erased]',
           customerPhone: redactedPhone,
+          customerPhoneIdx: null,
           customerEmail: '',
           deliveryLocation: '[erased]',
           deliveryPhone: '',
