@@ -69,6 +69,7 @@ enum StockReason {
   order_rejected
   order_deleted
   order_restored
+  refund
 }
 
 // ── Commerce (Phase M4) ──────────────────────────────────────────────────────
@@ -1101,6 +1102,8 @@ model Conversation {
   lastInboundAt  DateTime? @map("last_inbound_at")
   lastOutboundAt DateTime? @map("last_outbound_at")
   lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  // Optimistic concurrency for concurrent inbound messages.
+  version        Int       @default(0)
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 

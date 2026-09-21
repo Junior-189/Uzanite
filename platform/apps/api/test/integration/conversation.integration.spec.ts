@@ -318,4 +318,18 @@ d('conversation flows (Postgres)', () => {
     const conv = await h.prisma.base.conversation.findFirst({ where: { tenantId } });
     expect(conv?.step).toBe('MAIN_MENU');
   });
+
+  it('creates state via upsert and advances the optimistic version per message', async () => {
+    const { tenantId } = await seedTenant('conv-ver');
+    const account = await h.prisma.base.whatsAppAccount.findFirst({ where: { tenantId } });
+
+    await say(tenantId, account!.id, '255700000123', 'Hi');
+    const first = await h.prisma.base.conversation.findFirst({ where: { tenantId, contactPhone: '255700000123' } });
+    expect(first).toBeTruthy();
+    expect(first!.version).toBeGreaterThanOrEqual(1);
+
+    await say(tenantId, account!.id, '255700000123', 'Hello again');
+    const second = await h.prisma.base.conversation.findFirst({ where: { tenantId, contactPhone: '255700000123' } });
+    expect(second!.version).toBe(first!.version + 1);
+  });
 });

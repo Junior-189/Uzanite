@@ -195,11 +195,18 @@ export class OrdersService {
   }
 
   // ── Stock integration (single path: StockService.applyChange) ────────────────
+  /** Restores stock when an order is refunded (idempotent per item+reason). */
+  async restoreStockForRefund(tenantId: string, orderId: string, actor: string): Promise<void> {
+    const order = await this.prisma.db.order.findFirst({ where: { id: orderId, tenantId }, include: { items: true } });
+    if (!order) return;
+    await this.changeStock(tenantId, orderId, order.items, 'refund', 'restore', actor);
+  }
+
   private async changeStock(
     tenantId: string,
     orderId: string,
     items: Array<{ id: string; productId: string | null; quantity: number }>,
-    reason: 'order_created' | 'order_rejected' | 'order_deleted' | 'order_restored',
+    reason: 'order_created' | 'order_rejected' | 'order_deleted' | 'order_restored' | 'refund',
     direction: 'deduct' | 'restore',
     recordedBy: string
   ): Promise<void> {

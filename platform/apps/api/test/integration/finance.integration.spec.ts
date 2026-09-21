@@ -164,11 +164,15 @@ d('finance integration (Postgres)', () => {
     expect(payment?.status).toBe('failed');
     expect(await h.prisma.base.ledgerEntry.count({ where: { tenantId: t, type: 'payment_in' } })).toBe(0);
     expect((await h.prisma.base.order.findUnique({ where: { id: order.id } }))?.status).not.toBe('PAID');
+    // A mismatched-but-real payment must raise an operator notification.
+    const notice = await h.prisma.base.notification.findFirst({ where: { tenantId: t, type: 'payment_awaiting_review' } });
+    expect(notice).toBeTruthy();
   });
 
   it('refunds within bounds, writes a debit ledger entry, and is terminal when fully refunded', async () => {
     const t = await seedTenant(h, 'fin-f');
-    const { order } = await approvedOrder(t, 1, 3000);
+    const { order, product } = await approvedOrder(t, 1, 3000);
+    expect((await h.prisma.base.product.findUnique({ where: { id: product.id } }))?.stock).toBe(49);
     const confirmed = await withTenant(t, () => payments.confirmManual(t, order.id, { method: 'Cash', reference: 'R-9' } as never, 'Owner'));
     const paymentId = confirmed.payment.id;
 
@@ -186,6 +190,8 @@ d('finance integration (Postgres)', () => {
     // Full remaining refund flips the payment to refunded (terminal).
     await withTenant(t, () => payments.refund(t, paymentId, { amount: 2000, reason: 'rest' } as never, 'Owner'));
     expect((await h.prisma.base.payment.findUnique({ where: { id: paymentId } }))?.status).toBe('refunded');
+    // Full refund returns the goods to stock.
+    expect((await h.prisma.base.product.findUnique({ where: { id: product.id } }))?.stock).toBe(50);
     await expect(withTenant(t, () => payments.refund(t, paymentId, { amount: 1, reason: 'x' } as never, 'Owner'))).rejects.toThrow(/exceeds/);
   });
 

@@ -317,12 +317,15 @@ export class PaymentsService {
         let mapped = mapStatus(input.status);
 
         // Integrity: never credit a different amount/currency than recorded.
+        let mismatch = false;
         if (mapped === 'succeeded') {
           if (input.currency && input.currency.toUpperCase() !== payment.currency) {
             mapped = 'failed';
+            mismatch = true;
             input.failureReason = `Currency mismatch (expected ${payment.currency}, got ${input.currency})`;
           } else if (input.amount !== undefined && round2(input.amount) !== Number(payment.amount)) {
             mapped = 'failed';
+            mismatch = true;
             input.failureReason = `Amount mismatch (expected ${payment.amount}, got ${input.amount})`;
           }
         }
@@ -338,6 +341,29 @@ export class PaymentsService {
         });
         await this.recordAttempt(payment, mapped, {}, input.raw ?? {});
         this.metrics?.observePaymentWebhook(input.providerName, mapped);
+
+        if (mismatch) {
+          // A genuinely-paid transaction was auto-failed on a mismatch; surface
+          // it to the operator for manual review instead of losing it silently.
+          await this.prisma.db.notification.createMany({
+            data: [{
+              id: newId(),
+              tenantId: payment.tenantId,
+              type: 'payment_awaiting_review',
+              title: 'Payment needs review',
+              message: input.failureReason || 'A provider payment did not match the order',
+              priority: 'high',
+              dedupeKey: `payment-review:${payment.id}`,
+              data: { paymentId: payment.id, orderId: payment.orderId, provider: input.providerName } as object,
+            }],
+            skipDuplicates: true,
+          });
+          await this.outbox.enqueue({
+            type: 'payment.awaiting_review',
+            tenantId: payment.tenantId,
+            payload: { paymentId: payment.id, orderId: payment.orderId, reason: input.failureReason ?? '' },
+          });
+        }
 
         if (mapped === 'succeeded') {
           // The money has arrived. Record it regardless of the order's workflow
@@ -475,6 +501,10 @@ export class PaymentsService {
 
       if (amount >= remaining) {
         await this.prisma.db.payment.update({ where: { id: paymentId }, data: { status: 'refunded' } });
+        // Full refund: return the goods to stock so inventory and the books agree.
+        if (payment.orderId) {
+          await this.orders.restoreStockForRefund(tenantId, payment.orderId, actor);
+        }
       }
 
       await this.outbox.enqueue({
