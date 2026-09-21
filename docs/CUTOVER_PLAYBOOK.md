@@ -130,9 +130,8 @@ requests are still hitting `/api/v1/<domain>` in the proxy logs.
   on the admin account (`AdminMfaGuard`); enable it before cutting over or the
   admin panel returns `mfa_setup_required`.
 - **staff** — staff login is now served by the platform
-  (`POST /api/v1/staff/login`). Staff sessions are **access-token only** (no
-  refresh), so staff re-authenticate when the access token expires. Keep an eye
-  on staff support tickets during the soak window.
+  (`POST /api/v1/staff/login`). Staff sessions refresh like tenant sessions
+  (polymorphic `refresh_tokens`), so no special handling is needed.
 - **payments / webhooks** — provider callbacks are idempotent on the platform
   (`/api/v1/payments/webhook`, `/api/v1/whatsapp/webhook`). Confirm the provider
   callback URLs are updated to the `/api/v1` paths **before** enabling payments,

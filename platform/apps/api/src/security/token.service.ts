@@ -73,12 +73,13 @@ export class TokenService {
     }
   }
 
-  async issueRefresh(userId: string, meta: RefreshMeta = {}): Promise<string> {
+  async issueRefresh(userId: string, meta: RefreshMeta = {}, principalType = 'user'): Promise<string> {
     const raw = randomToken(48);
     await this.prisma.db.refreshToken.create({
       data: {
         id: newId(),
-        userId,
+        principalId: userId,
+        principalType,
         tokenHash: sha256(raw),
         expiresAt: new Date(Date.now() + this.refreshTtlMs),
         ip: meta.ip,
@@ -89,14 +90,17 @@ export class TokenService {
   }
 
   // Rotates a refresh token. Reuse of a revoked token revokes the whole family.
-  async rotateRefresh(raw: string, meta: RefreshMeta = {}): Promise<{ userId: string; refreshToken: string } | null> {
+  async rotateRefresh(
+    raw: string,
+    meta: RefreshMeta = {}
+  ): Promise<{ userId: string; principalType: string; refreshToken: string } | null> {
     const hash = sha256(raw);
     const existing = await this.prisma.db.refreshToken.findUnique({ where: { tokenHash: hash } });
     if (!existing) return null;
 
     if (existing.revokedAt) {
       await this.prisma.db.refreshToken.updateMany({
-        where: { userId: existing.userId, revokedAt: null },
+        where: { principalId: existing.principalId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
       return null;
@@ -112,14 +116,15 @@ export class TokenService {
     await this.prisma.db.refreshToken.create({
       data: {
         id: newId(),
-        userId: existing.userId,
+        principalId: existing.principalId,
+        principalType: existing.principalType,
         tokenHash: newHash,
         expiresAt: new Date(Date.now() + this.refreshTtlMs),
         ip: meta.ip,
         userAgent: meta.userAgent,
       },
     });
-    return { userId: existing.userId, refreshToken: newRaw };
+    return { userId: existing.principalId, principalType: existing.principalType, refreshToken: newRaw };
   }
 
   async revoke(raw: string): Promise<void> {
@@ -131,7 +136,7 @@ export class TokenService {
 
   async revokeAllForUser(userId: string): Promise<void> {
     await this.prisma.db.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
+      where: { principalId: userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }

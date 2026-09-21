@@ -291,7 +291,6 @@ model User {
   deletedAt          DateTime?     @map("deleted_at")
 
   memberships    Membership[]
-  refreshTokens  RefreshToken[]
   resetTokens    PasswordResetToken[]
   loginAttempts  LoginAttempt[]
   identityAliases IdentityAlias[]
@@ -338,20 +337,22 @@ model MembershipInvite {
   @@map("membership_invites")
 }
 
+// Polymorphic refresh tokens: `principalId` is a User id or a Staff id, keyed by
+// `principalType`. Deliberately NOT an FK, so staff (which are not Users) can
+// hold refresh sessions; revocation is explicit (revokeAllForUser / logout).
 model RefreshToken {
-  id         String    @id @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  tokenHash  String    @unique @map("token_hash")
-  expiresAt  DateTime  @map("expires_at")
-  revokedAt  DateTime? @map("revoked_at")
-  replacedBy String?   @map("replaced_by")
-  ip         String?
-  userAgent  String?   @map("user_agent")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  id            String    @id @db.Uuid
+  principalId   String    @map("user_id") @db.Uuid
+  principalType String    @default("user") @map("principal_type")
+  tokenHash     String    @unique @map("token_hash")
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  replacedBy    String?   @map("replaced_by")
+  ip            String?
+  userAgent     String?   @map("user_agent")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
+  @@index([principalId])
   @@map("refresh_tokens")
 }
 

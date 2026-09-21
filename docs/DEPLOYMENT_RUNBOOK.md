@@ -323,8 +323,6 @@ paths still served.
 
 ## 13. Known gaps
 
-- **Staff sessions** use access tokens only; `refresh_tokens` is FK-bound to
-  `users`, so staff must re-authenticate when the access token expires.
 - **Local storage is single-host.** Multi-host/autoscaled API requires object
   storage.
 - **No down migrations.** Rollback is restore/PITR based by design.

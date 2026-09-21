@@ -231,10 +231,13 @@ export class AuthService {
     const rotated = await this.tokens.rotateRefresh(raw, meta);
     if (!rotated) throw new UnauthorizedException('Invalid or expired session');
 
-    const user = await this.prisma.db.user.findFirst({ where: { id: rotated.userId, deletedAt: null } });
+    const user =
+      rotated.principalType === 'staff'
+        ? null
+        : await this.prisma.db.user.findFirst({ where: { id: rotated.userId, deletedAt: null } });
     if (!user) {
-      // Staff sessions rotate through the same refresh-token table (keyed by the
-      // staff id). Re-issue a `type: 'staff'` access token instead of failing.
+      // Staff sessions use the same refresh-token table with
+      // principalType='staff'. Re-issue a `type: 'staff'` access token.
       const staff = await runAsSystem(() =>
         this.prisma.db.staff.findFirst({
           where: { id: rotated.userId },
@@ -392,9 +395,11 @@ export class AuthService {
         tokenVersion: staff.tokenVersion,
         type: 'staff',
       });
+      const refreshToken = await this.tokens.issueRefresh(staff.id, meta, 'staff');
       return {
         success: true,
         token,
+        refreshToken,
         user: { _id: staff.id, name: staff.name, email: staff.email, role: 'staff', permissions: staff.permissions, businessId: staff.tenantId, avatar: '' },
       };
     }

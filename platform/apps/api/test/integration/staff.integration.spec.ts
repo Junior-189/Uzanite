@@ -63,6 +63,12 @@ d('staff (Postgres)', () => {
     expect(ok.user.role).toBe('staff');
     expect(ok.user.permissions).toEqual(['orders', 'products']);
     expect(ok.user.businessId).toBe(t);
+    expect(typeof ok.refreshToken).toBe('string');
+
+    // Staff refresh tokens rotate through the shared table and re-issue a staff token.
+    const refreshed = await h.auth.refresh(ok.refreshToken!, {});
+    expect(refreshed.success).toBe(true);
+    expect(typeof refreshed.token).toBe('string');
 
     await expect(staff.login({ email: 'login@shop.com', password: 'nope' } as never, {})).rejects.toThrow(/Invalid credentials/);
   });

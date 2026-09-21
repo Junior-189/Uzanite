@@ -109,9 +109,11 @@ export class StaffService {
       type: 'staff',
     });
 
+    const refreshToken = await this.tokens.issueRefresh(staff.id, meta, 'staff');
     return {
       success: true,
       token,
+      refreshToken,
       user: {
         _id: staff.id,
         name: staff.name,
