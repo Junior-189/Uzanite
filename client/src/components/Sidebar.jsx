@@ -1,3 +1,5 @@
+import { restoreAdminSession, clearSession } from '../utils/tokenStore';
+import { clearTenantData } from '../db/helpers';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -177,10 +179,11 @@ export default function Sidebar({ open, onClose }) {
         <div className="p-3 border-t border-white/10">
           {user?.impersonating && (
             <button
-              onClick={() => {
+              onClick={async () => {
                 // Restores the admin's own session after impersonating a
                 // tenant. Goes through tokenStore so the access token stays in
                 // memory and is never persisted.
+                await clearTenantData();
                 if (restoreAdminSession()) {
                   window.location.href = '/admin/adminPanel';
                 } else {

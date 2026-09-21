@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
+import { isRoutedToPlatform } from '../utils/apiRouting';
+import { uploadFile } from '../utils/files';
 import { fetchFromCacheOrApi, createOffline, updateOffline, deleteOffline } from '../db/helpers';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import { imgUrl } from '../utils/imgUrl';
@@ -63,7 +65,13 @@ export default function Purchases() {
         expiryDate: form.expiryDate || null,
       };
 
-      if (navigator.onLine) {
+      if (navigator.onLine && isRoutedToPlatform('/purchases')) {
+        const body = { ...payload, clientRef: crypto.randomUUID() };
+        if (receiptFile) body.receiptKey = (await uploadFile(receiptFile, 'other')).key;
+        const json = await api.post('/purchases', body);
+        if (!json.success) throw new Error(json.error || t('common.failed'));
+        showToast(editPurchase ? t('purchases.confirmed_updated') : t('purchases.confirmed_recorded'), 'success');
+      } else if (navigator.onLine) {
         const fd = new FormData();
         for (const [k, v] of Object.entries(payload)) {
           if (v !== undefined && v !== null) fd.append(k, String(v));
@@ -106,7 +114,12 @@ export default function Purchases() {
     if (!file || !p) return;
     const id = p._id || p.id;
     try {
-      if (navigator.onLine) {
+      if (navigator.onLine && isRoutedToPlatform('/purchases')) {
+        const receiptKey = (await uploadFile(file, 'other')).key;
+        const json = await api.patch(`/purchases/${id}`, { receiptKey });
+        if (!json.success) throw new Error(json.error || t('common.failed'));
+        showToast(t('purchase.receipt_uploaded'), 'success');
+      } else if (navigator.onLine) {
         const fd = new FormData();
         fd.append('receipt', file);
         const token = getAccessToken();
@@ -127,7 +140,11 @@ export default function Purchases() {
     if (!confirm(t('purchase.delete_receipt_confirm'))) return;
     const id = p._id || p.id;
     try {
-      if (navigator.onLine) {
+      if (navigator.onLine && isRoutedToPlatform('/purchases')) {
+        const json = await api.patch(`/purchases/${id}`, { receiptKey: '' });
+        if (!json.success) throw new Error(json.error || t('common.failed'));
+        showToast(t('purchase.receipt_deleted'), 'success');
+      } else if (navigator.onLine) {
         const token = getAccessToken();
         const headers = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
         const res = await fetch(`${API_URL}/purchases/${id}`, {

@@ -413,6 +413,7 @@ export default function Login() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('common.email')}</label>
                   <input
                     type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                    aria-label={t('common.email')}
                     placeholder={t('login.email_placeholder')} required
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-colors"
                   />
@@ -422,6 +423,7 @@ export default function Login() {
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                      aria-label={t('common.password')}
                       placeholder={t('login.password_placeholder')} required
                       className="w-full px-4 py-2.5 pr-11 rounded-xl border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-colors"
                     />
@@ -459,6 +461,7 @@ export default function Login() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('login.business_name')}</label>
                   <input
                     type="text" value={name} onChange={(e) => setName(e.target.value)}
+                    aria-label={t('login.business_name')}
                     placeholder={t('login.business_name_placeholder')} required
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-colors"
                   />
@@ -467,6 +470,7 @@ export default function Login() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('common.email')}</label>
                   <input
                     type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                    aria-label={t('common.email')}
                     placeholder={t('login.email_placeholder')} required
                     className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-colors"
                   />

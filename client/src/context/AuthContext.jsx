@@ -195,7 +195,7 @@ export function AuthProvider({ children }) {
     await clearTenantData();
     setToken(null);
     setUser({});
-    window.location.hash = '#/admin/login.html';
+    window.location.assign('/admin/login.html');
   }, []);
 
   const refreshPermissions = useCallback(async () => {

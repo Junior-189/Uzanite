@@ -95,11 +95,15 @@ export default function Orders() {
   };
 
   const doAction = async (id, action, body) => {
+    // State changes require the server; acting offline would silently diverge
+    // from money/stock. Refuse instead of reporting a false success.
+    if (!isOnline) {
+      showToast(t('common.requires_connection') || 'You are offline — reconnect to make changes', 'error');
+      return;
+    }
     setActionLoading(action + id);
     try {
-      if (isOnline) {
-        await apiAction(`/orders/${id}/${action}`, 'POST', body || {});
-      }
+      await apiAction(`/orders/${id}/${action}`, 'POST', body || {});
       showToast(`${action.replace('-', ' ')} success`, 'success');
       fetchOrders(true);
       api.get('/products').then(r => { if (r.success) setProducts(r.products || []); }).catch(() => {});

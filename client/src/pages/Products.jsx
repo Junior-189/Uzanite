@@ -591,7 +591,7 @@ export default function Products() {
                   {filtered.map((product) => (
                     <tr
                       key={product._id}
-                      onClick={() => openDetail(product)}
+                      {...rowActivate(() => openDetail(product), { label: product.name })}
                       className="cursor-pointer transition-colors hover:bg-gray-50/50"
                     >
                       <td className="px-5 py-3.5">
