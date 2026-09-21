@@ -10,11 +10,14 @@ const d = hasDb ? describe : describe.skip;
 class FakeMeta {
   mode: 'ok' | 'permanent' | 'transient' = 'ok';
   lastText: { to: string; text: string } | null = null;
+  private seq = 0;
   async sendText(_creds: unknown, to: string, text: string) {
     this.lastText = { to, text };
     if (this.mode === 'permanent') throw new MetaApiError('invalid recipient', { status: 400, permanent: true });
     if (this.mode === 'transient') throw new MetaApiError('temporary upstream error', { permanent: false });
-    return { messageId: 'wamid.SENT-1', raw: { ok: true } };
+    // Real provider message ids are unique; the (tenant, providerMessageId)
+    // unique constraint enforces that.
+    return { messageId: `wamid.SENT-${++this.seq}`, raw: { ok: true } };
   }
   async sendTemplate(_creds: unknown, _to: string, _t: unknown) {
     return { messageId: 'wamid.SENT-T', raw: {} };
@@ -41,6 +44,7 @@ d('whatsapp outbound sender (worker, Postgres)', () => {
   beforeEach(async () => {
     fake.mode = 'ok';
     fake.lastText = null;
+    (fake as unknown as { seq: number }).seq = 0;
     await resetDb(prisma);
   });
 

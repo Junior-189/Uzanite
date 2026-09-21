@@ -6,6 +6,8 @@ import { randomUUID } from 'crypto';
 const POLL_MS = 10000;
 const BATCH = 20;
 const MAX_ATTEMPTS = 5;
+// A `sending` row older than this was claimed by a crashed worker; reclaim it.
+const LEASE_MS = 10 * 60 * 1000;
 
 type MessageRow = Prisma.MessageGetPayload<{ include: { account: true } }>;
 type SendOutcome = { status: string; error?: string };
@@ -46,6 +48,15 @@ export class WhatsAppOutboundService implements OnApplicationBootstrap, OnApplic
     if (this.running) return;
     this.running = true;
     try {
+      // Reclaim rows stranded in `sending` by a crashed worker (lease expiry).
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', true)`;
+        await tx.message.updateMany({
+          where: { direction: 'outbound', status: 'sending', updatedAt: { lt: new Date(Date.now() - LEASE_MS) } },
+          data: { status: 'queued' },
+        });
+      });
+
       // Claim a batch atomically (no network I/O inside this transaction).
       const ids = await this.prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', true)`;

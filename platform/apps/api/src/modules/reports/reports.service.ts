@@ -25,6 +25,9 @@ export interface ReportSeriesPoint {
   value: number;
 }
 
+// Hard cap so a huge tenant cannot OOM the report renderer.
+const REPORT_ROW_CAP = 5000;
+
 const fmtNum = (n: number) => Number(n ?? 0).toLocaleString('en-US');
 const fmtDate = (d: Date | null) => (d ? new Date(d).toLocaleDateString('en-GB') : '—');
 
@@ -68,12 +71,12 @@ export class ReportsService {
     const withDate = (field: string) => (from ? { [field]: { gte: from } } : {});
 
     const [orders, products, expenses, purchases, debts, staff] = await Promise.all([
-      this.prisma.db.order.findMany({ where: { tenantId, ...withDate('createdAt') } }),
-      this.prisma.db.product.findMany({ where: { tenantId, deletedAt: null } }),
-      this.prisma.db.expense.findMany({ where: { tenantId, ...withDate('date') } }),
-      this.prisma.db.purchase.findMany({ where: { tenantId, deletedAt: null, ...withDate('date') } }),
-      this.prisma.db.debt.findMany({ where: { tenantId, deletedAt: null, ...withDate('createdAt') } }),
-      this.prisma.db.staff.findMany({ where: { tenantId, ...withDate('createdAt') } }),
+      this.prisma.db.order.findMany({ take: REPORT_ROW_CAP, where: { tenantId, ...withDate('createdAt') } }),
+      this.prisma.db.product.findMany({ take: REPORT_ROW_CAP, where: { tenantId, deletedAt: null } }),
+      this.prisma.db.expense.findMany({ take: REPORT_ROW_CAP, where: { tenantId, ...withDate('date') } }),
+      this.prisma.db.purchase.findMany({ take: REPORT_ROW_CAP, where: { tenantId, deletedAt: null, ...withDate('date') } }),
+      this.prisma.db.debt.findMany({ take: REPORT_ROW_CAP, where: { tenantId, deletedAt: null, ...withDate('createdAt') } }),
+      this.prisma.db.staff.findMany({ take: REPORT_ROW_CAP, where: { tenantId, ...withDate('createdAt') } }),
     ]);
 
     const revenue = orders
@@ -113,7 +116,7 @@ export class ReportsService {
 
   private async expenses(tenantId: string, query: ReportQuery): Promise<Dataset> {
     const from = periodStart(query.period);
-    const rows = await this.prisma.db.expense.findMany({
+    const rows = await this.prisma.db.expense.findMany({ take: REPORT_ROW_CAP,
       where: { tenantId, ...(from ? { date: { gte: from } } : {}) },
       orderBy: { date: 'desc' },
     });
@@ -147,7 +150,7 @@ export class ReportsService {
 
   private async purchases(tenantId: string, query: ReportQuery): Promise<Dataset> {
     const from = periodStart(query.period);
-    const rows = await this.prisma.db.purchase.findMany({
+    const rows = await this.prisma.db.purchase.findMany({ take: REPORT_ROW_CAP,
       where: { tenantId, deletedAt: null, ...(from ? { date: { gte: from } } : {}) },
       orderBy: { date: 'desc' },
     });
@@ -182,7 +185,7 @@ export class ReportsService {
 
   private async debts(tenantId: string, query: ReportQuery): Promise<Dataset> {
     const from = periodStart(query.period);
-    const rows = await this.prisma.db.debt.findMany({
+    const rows = await this.prisma.db.debt.findMany({ take: REPORT_ROW_CAP,
       where: { tenantId, deletedAt: null, ...(from ? { createdAt: { gte: from } } : {}) },
       orderBy: { createdAt: 'desc' },
     });
@@ -223,7 +226,7 @@ export class ReportsService {
 
   private async orders(tenantId: string, query: ReportQuery): Promise<Dataset> {
     const from = periodStart(query.period);
-    const rows = await this.prisma.db.order.findMany({
+    const rows = await this.prisma.db.order.findMany({ take: REPORT_ROW_CAP,
       where: { tenantId, deletedAt: null, ...(from ? { createdAt: { gte: from } } : {}) },
       orderBy: { createdAt: 'desc' },
     });
@@ -260,7 +263,7 @@ export class ReportsService {
 
   private async products(tenantId: string, query: ReportQuery): Promise<Dataset> {
     const from = periodStart(query.period);
-    const rows = await this.prisma.db.product.findMany({
+    const rows = await this.prisma.db.product.findMany({ take: REPORT_ROW_CAP,
       where: { tenantId, deletedAt: null, ...(from ? { createdAt: { gte: from } } : {}) },
       orderBy: { name: 'asc' },
     });
@@ -297,7 +300,7 @@ export class ReportsService {
 
   private async staff(tenantId: string, query: ReportQuery): Promise<Dataset> {
     const from = periodStart(query.period);
-    const rows = await this.prisma.db.staff.findMany({
+    const rows = await this.prisma.db.staff.findMany({ take: REPORT_ROW_CAP,
       where: { tenantId, ...(from ? { createdAt: { gte: from } } : {}) },
       orderBy: { createdAt: 'desc' },
     });

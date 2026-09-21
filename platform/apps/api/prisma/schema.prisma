@@ -1059,7 +1059,7 @@ model Message {
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, contactPhone, createdAt])
-  @@index([tenantId, providerMessageId])
+  @@unique([tenantId, providerMessageId])
   @@index([tenantId, status, availableAt])
   @@index([tenantId, createdAt])
   @@map("messages")

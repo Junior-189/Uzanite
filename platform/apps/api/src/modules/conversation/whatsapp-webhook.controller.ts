@@ -68,17 +68,22 @@ export class WhatsAppWebhookController {
     const result = await this.webhook.handle((req.body ?? {}) as MetaWebhookBody);
 
     // 2) Run the conversation flow for each newly recorded inbound message.
+    let retryable = false;
     for (const ev of result.inbound) {
       try {
         await this.conversation.processInbound(ev);
       } catch (err) {
         this.logger.error(`Conversation flow failed for ${ev.providerMessageId}: ${(err as Error).message}`);
         await this.conversation.handleFailure(ev);
+        // Release the dedupe claim so Meta's retry re-drives the flow instead of
+        // being silently dropped.
+        await this.webhook.release(`msg:${ev.providerMessageId}`);
+        retryable = true;
       }
     }
 
     // A non-2xx response makes Meta retry; already-processed sub-events are deduped.
-    if (result.failed > 0) throw new InternalServerErrorException(`webhook partially failed (${result.failed})`);
+    if (result.failed > 0 || retryable) throw new InternalServerErrorException('webhook processing failed; retry requested');
     return { success: true, processed: result.processed, failed: result.failed };
   }
 }

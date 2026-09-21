@@ -82,11 +82,23 @@ if [ -n "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]; then
       -pass env:BACKUP_ENCRYPTION_PASSPHRASE
     rm -f "$DUMP"
     FINAL="$DUMP.enc"
-  else
+  elif [ "${ALLOW_UNENCRYPTED_BACKUP:-}" = "true" ]; then
     echo "WARNING: openssl not found — backup left UNENCRYPTED" >&2
+  else
+    echo "ERROR: openssl not found and ALLOW_UNENCRYPTED_BACKUP != true — refusing to write an unencrypted backup" >&2
+    rm -f "$DUMP"
+    exit 4
   fi
 else
-  echo "WARNING: BACKUP_ENCRYPTION_PASSPHRASE not set — backup is UNENCRYPTED" >&2
+  # Fair warning by default: backups contain every tenant's PII and financial
+  # records, so an unencrypted archive is a breach risk.
+  if [ "${ALLOW_UNENCRYPTED_BACKUP:-}" = "true" ]; then
+    echo "WARNING: BACKUP_ENCRYPTION_PASSPHRASE not set — backup is UNENCRYPTED" >&2
+  else
+    echo "ERROR: BACKUP_ENCRYPTION_PASSPHRASE not set — refusing to write an unencrypted backup (set ALLOW_UNENCRYPTED_BACKUP=true to override)" >&2
+    rm -f "$DUMP"
+    exit 4
+  fi
 fi
 
 # Checksum so corruption in transit or at rest is detectable later.

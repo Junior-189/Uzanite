@@ -125,6 +125,15 @@ export class WhatsAppWebhookService {
     );
   }
 
+  /** Releases a dedupe claim so a failed flow can be re-driven on Meta retry. */
+  async release(eventId: string): Promise<void> {
+    try {
+      await this.prisma.db.webhookEvent.deleteMany({ where: { provider: 'meta', eventId } });
+    } catch {
+      /* best-effort: a stale claim only delays reprocessing */
+    }
+  }
+
   private async claim(eventId: string, tenantId: string, type: string, payload: unknown): Promise<boolean> {
     const res = await this.prisma.db.webhookEvent.createMany({
       data: [{ id: newId(), provider: 'meta', eventId, tenantId, type, payload: payload as object }],
@@ -160,7 +169,12 @@ export class WhatsAppWebhookService {
     const mediaMimeType =
       message.image?.mime_type ?? message.document?.mime_type ?? message.audio?.mime_type ?? message.video?.mime_type ?? null;
 
-    await this.prisma.db.message.create({
+    const existingMessage = await this.prisma.db.message.findFirst({
+      where: { tenantId, providerMessageId: message.id },
+      select: { id: true },
+    });
+    if (!existingMessage) {
+      await this.prisma.db.message.create({
       data: {
         id: newId(),
         tenantId,
@@ -178,7 +192,8 @@ export class WhatsAppWebhookService {
         sentAt: new Date(),
         statusUpdatedAt: new Date(),
       },
-    });
+      });
+    }
 
     await this.outbox.enqueue({
       type: 'whatsapp.inbound',

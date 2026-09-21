@@ -29,6 +29,7 @@ export class BroadcastService {
 
     const contacts = await this.prisma.db.whatsAppContact.findMany({
       where: { tenantId, deletedAt: null, optIn: true, unsubscribedAt: null },
+      take: 5000,
     });
     if (contacts.length === 0) {
       throw new BadRequestException(
@@ -103,6 +104,7 @@ export class BroadcastService {
     const rows = await this.prisma.db.whatsAppContact.findMany({
       where: { tenantId, deletedAt: null, email: { not: '' } },
       orderBy: { lastMessageAt: 'desc' },
+      take: 5000,
     });
     return {
       success: true,

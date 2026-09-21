@@ -149,6 +149,7 @@ export class StaffService {
       where: { tenantId },
       select: STAFF_SELECT,
       orderBy: { createdAt: 'desc' },
+      take: 1000,
     });
 
     const [orderGroups, productGroups] = await Promise.all([

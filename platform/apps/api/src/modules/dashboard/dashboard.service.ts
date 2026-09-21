@@ -46,32 +46,35 @@ export class DashboardService {
       where.createdAt = { gte: this.periodStart(query.period as string) };
     }
 
-    const [orders, totalProducts] = await Promise.all([
-      this.prisma.db.order.findMany({
-        where,
-        select: { status: true, total: true, source: true, paymentMethod: true },
+    // Aggregate in SQL — loading every order into memory does not scale.
+    const realizedStatuses = ['PAID', 'DELIVERED'] as const;
+    const realizedWhere = { ...where, status: { in: [...realizedStatuses] } };
+    const [statusGroups, revenueAgg, cashOrders, totalProducts] = await Promise.all([
+      this.prisma.db.order.groupBy({ by: ['status'], where, _count: { _all: true } }),
+      this.prisma.db.order.aggregate({ where: realizedWhere, _sum: { total: true }, _count: true }),
+      this.prisma.db.order.count({
+        where: { ...realizedWhere, OR: [{ source: 'cash' }, { paymentMethod: 'Cash' }] },
       }),
       this.prisma.db.product.count({ where: { tenantId, deletedAt: null, active: true } }),
     ]);
 
-    const countStatus = (status: string) => orders.filter((o) => o.status === status).length;
-    const realized = orders.filter((o) => o.status === 'PAID' || o.status === 'DELIVERED');
-    const revenue = realized.reduce((sum, o) => sum + Number(o.total), 0);
-    const cashOrders = realized.filter((o) => o.source === 'cash' || o.paymentMethod === 'Cash').length;
+    const counts = new Map(statusGroups.map((g) => [g.status as string, g._count._all]));
+    const countStatus = (status: string) => counts.get(status) ?? 0;
+    const realizedCount = Number(revenueAgg._count ?? 0);
 
     return {
       success: true,
       stats: {
-        totalOrders: orders.length,
+        totalOrders: statusGroups.reduce((sum, g) => sum + g._count._all, 0),
         pendingOrders: countStatus('PENDING'),
         approvedOrders: countStatus('APPROVED'),
         pendingPaymentOrders: countStatus('PENDING_PAYMENT'),
-        paidOrders: realized.length,
+        paidOrders: realizedCount,
         rejectedOrders: countStatus('REJECTED'),
         deliveredOrders: countStatus('DELIVERED'),
-        revenue,
+        revenue: Number(revenueAgg._sum?.total ?? 0),
         cashOrders,
-        onlineOrders: realized.length - cashOrders,
+        onlineOrders: realizedCount - cashOrders,
         totalProducts,
       },
     };

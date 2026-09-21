@@ -146,16 +146,20 @@ export class OrdersService {
 
   // ── Item resolution (server-authoritative pricing) ──────────────────────────
   private async resolveItems(tenantId: string, inputs: CreateOrderInput['items']): Promise<ResolvedItem[]> {
+    // One query for all referenced products (avoids an N+1 per line item).
+    const productIds = [...new Set(inputs.map((i) => i.productId).filter((id): id is string => !!id))];
+    const products = productIds.length
+      ? await this.prisma.db.product.findMany({
+          where: { id: { in: productIds }, tenantId, deletedAt: null },
+          select: { id: true, name: true, price: true, minPrice: true, currency: true },
+        })
+      : [];
+    const byId = new Map(products.map((p) => [p.id, p]));
+
     const resolved: ResolvedItem[] = [];
     for (const input of inputs) {
-      let product: { id: string; name: string; price: unknown; minPrice: unknown; currency: string } | null = null;
-      if (input.productId) {
-        product = await this.prisma.db.product.findFirst({
-          where: { id: input.productId, tenantId, deletedAt: null },
-          select: { id: true, name: true, price: true, minPrice: true, currency: true },
-        });
-        if (!product) throw new NotFoundException(`Product ${input.productId} not found`);
-      }
+      const product = input.productId ? byId.get(input.productId) ?? null : null;
+      if (input.productId && !product) throw new NotFoundException(`Product ${input.productId} not found`);
 
       const listPrice = product ? round2(Number(product.price)) : undefined;
       const floorPrice = product ? round2(Number(product.minPrice)) : 0;
@@ -337,7 +341,7 @@ export class OrdersService {
           });
         }
 
-        await this.billing.incrementUsage(tenantId, 'ordersPerMonth');
+        await this.billing.incrementUsage(tenantId, 'ordersPerMonth', 1, true);
         return id;
       });
     } catch (err) {
