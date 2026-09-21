@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
@@ -252,14 +253,14 @@ function PrivacyCard({ t }) {
   };
 
   const handleErase = async () => {
-    const phone = window.prompt(t('privacy.erase_phone_prompt'));
+    const phone = await promptDialog(t('privacy.erase_phone_prompt'));
     if (phone === null) return;
     let email = '';
     if (!phone.trim()) {
-      email = window.prompt(t('privacy.erase_email_prompt')) || '';
+      email = await promptDialog(t('privacy.erase_email_prompt')) || '';
       if (!email.trim()) return;
     }
-    if (!window.confirm(t('privacy.erase_confirm'))) return;
+    if (!(await confirmDialog(t('privacy.erase_confirm')))) return;
     setBusy(true);
     try {
       await api.post('/privacy/erase', phone.trim() ? { phone: phone.trim() } : { email: email.trim() });

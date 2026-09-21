@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -102,7 +103,7 @@ function ChatTab({ t }) {
   }, []);
 
   const disconnect = async () => {
-    if (!confirm(t('whatsapp.confirm_disconnect'))) return;
+    if (!(await confirmDialog(t('whatsapp.confirm_disconnect')))) return;
     try {
       const res = await api.post('/whatsapp/disconnect', {});
       if (res.success) { setConnected(false); setQr(null); setContacts([]); setSelectedContact(null); showToast(t('whatsapp.disconnected'), 'warning'); }
@@ -350,7 +351,7 @@ function ContactsTab({ t }) {
   };
 
   const handleDelete = async (phone) => {
-    if (!confirm(t('contacts.confirm_delete', { phone }))) return;
+    if (!(await confirmDialog(t('contacts.confirm_delete', { phone })))) return;
     try { await deleteOffline('contacts', phone); showToast(t('contacts.confirmed_deleted'), 'success'); fetchContacts(true); }
     catch { showToast(t('contacts.failed'), 'error'); }
   };
@@ -502,7 +503,7 @@ function BroadcastTab({ t }) {
 
   const handleSend = async () => {
     if (!message.trim()) return;
-    if (!confirm(t('broadcast.confirm_send', { count: contactCount }))) return;
+    if (!(await confirmDialog(t('broadcast.confirm_send', { count: contactCount })))) return;
     setSending(true);
     try {
       const res = await api.post('/broadcast/send', { message });

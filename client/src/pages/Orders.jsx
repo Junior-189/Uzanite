@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { resumeAudio } from '../utils/beep';
@@ -113,7 +114,7 @@ export default function Orders() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm(t('orders.confirm_delete'))) return;
+    if (!(await confirmDialog(t('orders.confirm_delete')))) return;
     try {
       await deleteOffline('orders', id);
       showToast(t('orders.confirmed_deleted'), 'success');

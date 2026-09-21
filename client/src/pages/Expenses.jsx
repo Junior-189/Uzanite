@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -67,7 +68,7 @@ export default function Expenses() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm(t('expenses.delete_confirm'))) return;
+    if (!(await confirmDialog(t('expenses.delete_confirm')))) return;
     try { await deleteOffline('expenses', id); showToast(t('expenses.confirmed_deleted'), 'success'); fetchExpenses(true); } catch { showToast(t('common.failed'), 'error'); }
   };
 

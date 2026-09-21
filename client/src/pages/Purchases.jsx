@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect, useRef } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -110,7 +111,7 @@ export default function Purchases() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm(t('purchase.delete_confirm'))) return;
+    if (!(await confirmDialog(t('purchase.delete_confirm')))) return;
     try { await deleteOffline('purchases', id); showToast(t('purchases.confirmed_deleted'), 'success'); fetchPurchases(true); } catch { showToast(t('common.failed'), 'error'); }
   };
 
@@ -150,7 +151,7 @@ export default function Purchases() {
   };
 
   const handleDeleteReceipt = async (p) => {
-    if (!confirm(t('purchase.delete_receipt_confirm'))) return;
+    if (!(await confirmDialog(t('purchase.delete_receipt_confirm')))) return;
     const id = p._id || p.id;
     try {
       if (navigator.onLine && isRoutedToPlatform('/purchases')) {

@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -92,7 +93,7 @@ export default function Staff() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!confirm(t('staff.confirm_delete', { name }))) return;
+    if (!(await confirmDialog(t('staff.confirm_delete', { name })))) return;
     try {
       await api.delete(`/staff/${id}`);
       showToast(t('staff.confirmed_deleted'), 'success');

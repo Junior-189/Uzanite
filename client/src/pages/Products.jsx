@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react';
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
@@ -144,7 +145,7 @@ export default function Products() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!confirm(t('products.confirm_delete', { name }))) return;
+    if (!(await confirmDialog(t('products.confirm_delete', { name })))) return;
     try {
       await deleteOffline('products', id);
       showToast(t('products.confirmed_deleted'), 'success');

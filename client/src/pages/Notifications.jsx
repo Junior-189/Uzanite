@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -39,7 +40,7 @@ export default function Notifications() {
   };
 
   const clearAll = async () => {
-    if (!confirm(t('notifications.confirm_clear'))) return;
+    if (!(await confirmDialog(t('notifications.confirm_clear')))) return;
     try {
       await api.delete('/notifications');
       showToast(t('notifications.confirmed_cleared'), 'success');

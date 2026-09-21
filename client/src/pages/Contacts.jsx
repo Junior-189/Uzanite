@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -66,7 +67,7 @@ export default function Contacts() {
   };
 
   const handleDelete = async (phone) => {
-    if (!confirm(t('contacts.confirm_delete', { phone }))) return;
+    if (!(await confirmDialog(t('contacts.confirm_delete', { phone })))) return;
     try { await deleteOffline('contacts', phone); showToast(t('contacts.confirmed_deleted'), 'success'); fetchContacts(true); }
     catch { showToast(t('contacts.failed'), 'error'); }
   };

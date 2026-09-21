@@ -8,6 +8,7 @@ import AuthGuard from './components/AuthGuard';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import UpdateBanner from './components/UpdateBanner';
+import DialogHost from './components/DialogHost';
 import FeatureDisabled from './components/FeatureDisabled';
 import { useFeatureFlags } from './features/featureFlags';
 
@@ -91,6 +92,7 @@ export default function App() {
             <ErrorBoundary>
               <AppRoutes />
               <UpdateBanner />
+              <DialogHost />
             </ErrorBoundary>
           </ToastProvider>
         </LangProvider>

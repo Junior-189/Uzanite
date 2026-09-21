@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -95,12 +96,12 @@ export default function Debts() {
   };
 
   const handleReminderAll = async () => {
-    if (!confirm(t('debt.remind_all_confirm'))) return;
+    if (!(await confirmDialog(t('debt.remind_all_confirm')))) return;
     try { const res = await apiAction('/debts/reminder-all', 'POST'); showToast(res.message || t('debts.confirmed_reminders_sent'), 'success'); } catch (err) { showToast(err.error || t('common.failed'), 'error'); }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm(t('debt.delete_confirm'))) return;
+    if (!(await confirmDialog(t('debt.delete_confirm')))) return;
     try { await deleteOffline('debts', id); showToast(t('debts.confirmed_deleted'), 'success'); fetchDebts(true); } catch { showToast(t('common.failed'), 'error'); }
   };
 
