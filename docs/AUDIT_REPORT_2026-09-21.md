@@ -295,4 +295,4 @@ Encrypted at rest with a keyed blind index for equality lookups, decrypt-on-read
 
 Backfills: `migrate:pii-orders`, `migrate:pii-contacts`, `migrate:pii-staff`, `migrate:pii-users`.
 
-**Remaining plaintext PII surfaces (tracked, lower exposure):** `Message.contactPhone`/`text` (bodies are redactable via retention), `LoginAttempt.email`/IP, `MembershipInvite.email`, and `Tenant.phone`. These are audit/queue records without substring-search requirements and can follow the same pattern.
+**All named PII surfaces now encrypted at rest** with blind indexes, decrypt-on-read, legacy fallback, and backfills: Order, WhatsAppContact, Staff, User, **Message** (contactPhone/text), **MembershipInvite** (email), **LoginAttempt** (email), and **Tenant.phone**. `LoginAttempt` IP/user-agent/device are deliberately retained as 90-day operational metadata (needed for abuse analysis).
