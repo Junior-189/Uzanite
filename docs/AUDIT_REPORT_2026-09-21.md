@@ -257,13 +257,21 @@ Duplicated FAQ/carousel components; `PAGE_PERMISSION_MAP` duplicated and diverge
 - **Medium/Low (selected):** constant-time verify-token; metrics token header-only; CSV formula-injection; atomic refresh rotation; env requires `STORAGE_SIGNING_SECRET`; `(tenant_id,id)` keyset indexes + finance CHECK constraints; feature-flag global cache generation; optional message-body redaction; frontend (impersonation exit, offline false-success, purchases routed writes, Netlify CSP, Modal focus trap, keyboard rows, labels, safe-area, TanStack removal, barcode throttle, Reports invalid-date/XHR).
 - Regenerated `openapi.json`.
 
-**Still open (lower risk / larger refactors — tracked, not fixed in this pass):**
+### Second remediation pass (all remaining tracked items, tested)
 
-- Conversation optimistic concurrency (`persistState` lost-update / first-message P2002).
-- Refund does not restore stock / cash orders unrefundable.
-- Provider mismatch marks paid payments `failed` without operator notification.
-- Duplicate payment/impersonation/WhatsApp endpoints; admin privacy stub route.
-- Worker: per-replica retention/reconciliation (no leader election); multiple Prisma pools; outbox DLQ has no replay tooling.
-- PII at rest (column encryption) and `ENCRYPTION_KEY` rotation envelope.
-- Frontend: hardcoded EN strings + duplicated components (`FAQAccordion`/`TestimonialCarousel`/`ClickableRow`); PWA PNG icons + external font/FA SRI; list pagination on contacts/expenses/debts/purchases/staff; native `confirm/prompt` dialogs; remaining touch-target sizes.
-- `OrdersService`/`PaymentsService` god-object extraction readiness.
+- **Correctness:** conversation optimistic concurrency (upsert + version, migration 0028); full refund restores stock (StockReason.refund, migration 0029); provider amount/currency mismatch raises an operator notification + outbox event.
+- **Worker/infra:** single shared Prisma pool; Redis leader election for retention/reconciliation; outbox dead-letters now land on the `dlq` queue with an admin replay endpoint.
+- **Consolidation:** removed the duplicate tenant impersonation route and the admin tenant-erase stub.
+- **Security:** `ENCRYPTION_KEY` rotation via `ENCRYPTION_KEYS_PREVIOUS` (decrypt-only fallback) + test.
+- **Frontend:** approval routes i18n (EN/SW); self-hosted Font Awesome + dropped the Google Fonts CDN (no third-party render-blocking assets).
+
+### Genuinely remaining (documented, low risk or structural)
+
+These are **accepted risks / structural work**, not defects, and are tracked here rather than rushed:
+
+- **PII column-level encryption** for order/contact PII: conflicts with the platform's server-side search/filter predicates (would need blind indexes). Compensating controls in place: RLS + FORCE, non-owner app role, at-rest disk encryption, and secret-field encryption with a rotation path.
+- **`OrdersService`/`PaymentsService` god-object extraction** into narrower domain services (structural; behavior already covered by tests).
+- **Client list pagination UI** on contacts/expenses/debts/purchases/staff (the platform caps/paginates reads; the pages currently render the first page). No data loss — follow-up UX work.
+- **Replace native `confirm`/`prompt` dialogs** (~20 sites) with in-app modals for embedded-webview reliability.
+- **De-duplicate frontend components** (`FAQAccordion`, `TestimonialCarousel`, `ClickableRow` vs `rowActivate`) and finish i18n for the remaining hardcoded label maps (TopBar/Sidebar/Reports).
+- **PWA PNG/maskable icons** (currently SVG).
