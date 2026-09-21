@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
 import { isRoutedToPlatform } from '../utils/apiRouting';
 import { uploadFile } from '../utils/files';
+import { useLoadMore } from '../hooks/useLoadMore';
 import { fetchFromCacheOrApi, createOffline, updateOffline, deleteOffline } from '../db/helpers';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import { imgUrl } from '../utils/imgUrl';
@@ -20,6 +21,9 @@ export default function Purchases() {
   const { isOnline } = useOnlineStatus();
   const API_URL = import.meta.env.VITE_API_URL || '/api';
   const [purchases, setPurchases] = useState([]);
+  const { nextCursor, setNextCursor, loadMore, loadingMore } = useLoadMore('purchases', (items) =>
+    setPurchases((prev) => [...prev, ...items])
+  );
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -49,7 +53,16 @@ export default function Purchases() {
   useEffect(() => { Promise.all([fetchPurchases(), fetchProducts()]).then(() => setLoading(false)); }, []);
 
   const fetchPurchases = async (forceRefresh = false) => {
-    try { const items = await fetchFromCacheOrApi('purchases', { forceRefresh }); setPurchases(items); } catch {}
+    try {
+      const items = await fetchFromCacheOrApi('purchases', { forceRefresh });
+      setPurchases(items);
+      if (isOnline) {
+        try {
+          const res = await api.get('/purchases', { params: { limit: 50 } });
+          if (res.success && Array.isArray(res.purchases)) { setPurchases(res.purchases); setNextCursor(res.nextCursor || null); }
+        } catch { /* keep cached */ }
+      }
+    } catch {}
   };
   const fetchProducts = async () => { try { const res = await api.get('/products'); if (res.success) setProducts(res.products || []); } catch {} };
 
@@ -398,6 +411,17 @@ export default function Purchases() {
           </button>
         )}
       />
+      {nextCursor && (
+        <div className="p-4 text-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-4 py-2 rounded-xl bg-white text-primary-700 border border-primary-200 text-sm font-semibold hover:bg-primary-50 disabled:opacity-50"
+          >
+            {loadingMore ? t('common.loading') : t('common.load_more')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

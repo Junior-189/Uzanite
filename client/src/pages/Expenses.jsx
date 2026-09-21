@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
+import { useLoadMore } from '../hooks/useLoadMore';
 import { fetchFromCacheOrApi, createOffline, deleteOffline } from '../db/helpers';
+import api from '../utils/api';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import StatCard from '../components/StatCard';
 import PeriodFilter from '../components/PeriodFilter';
@@ -15,6 +17,9 @@ export default function Expenses() {
   const { showToast } = useToast();
   const { isOnline } = useOnlineStatus();
   const [expenses, setExpenses] = useState([]);
+  const { nextCursor, setNextCursor, loadMore, loadingMore } = useLoadMore('expenses', (items) =>
+    setExpenses((prev) => [...prev, ...items])
+  );
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editExp, setEditExp] = useState(null);
@@ -37,8 +42,16 @@ export default function Expenses() {
 
   const fetchExpenses = async (forceRefresh = false) => {
     setLoading(true);
-    try { const items = await fetchFromCacheOrApi('expenses', { forceRefresh }); setExpenses(items); }
-    catch { showToast(t('common.failed'), 'error'); } finally { setLoading(false); }
+    try {
+      const items = await fetchFromCacheOrApi('expenses', { forceRefresh });
+      setExpenses(items);
+      if (isOnline) {
+        try {
+          const res = await api.get('/expenses', { params: { limit: 50 } });
+          if (res.success && Array.isArray(res.expenses)) { setExpenses(res.expenses); setNextCursor(res.nextCursor || null); }
+        } catch { /* keep cached */ }
+      }
+    } catch { showToast(t('common.failed'), 'error'); } finally { setLoading(false); }
   };
 
   const handleSubmit = async (e) => {
@@ -257,6 +270,17 @@ export default function Expenses() {
           </button>
         )}
       />
+      {nextCursor && (
+        <div className="p-4 text-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-4 py-2 rounded-xl bg-white text-primary-700 border border-primary-200 text-sm font-semibold hover:bg-primary-50 disabled:opacity-50"
+          >
+            {loadingMore ? t('common.loading') : t('common.load_more')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

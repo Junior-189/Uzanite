@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
+import { useLoadMore } from '../hooks/useLoadMore';
 import { fetchFromCacheOrApi, createOffline, updateOffline, deleteOffline, apiAction } from '../db/helpers';
+import api from '../utils/api';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import StatCard from '../components/StatCard';
 import SearchInput from '../components/SearchInput';
@@ -15,6 +17,9 @@ export default function Debts() {
   const { showToast } = useToast();
   const { isOnline } = useOnlineStatus();
   const [debts, setDebts] = useState([]);
+  const { nextCursor, setNextCursor, loadMore, loadingMore } = useLoadMore('debts', (items) =>
+    setDebts((prev) => [...prev, ...items])
+  );
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -46,8 +51,16 @@ export default function Debts() {
 
   const fetchDebts = async (forceRefresh = false) => {
     setLoading(true);
-    try { const items = await fetchFromCacheOrApi('debts', { forceRefresh }); setDebts(items); }
-    catch { showToast(t('common.failed'), 'error'); } finally { setLoading(false); }
+    try {
+      const items = await fetchFromCacheOrApi('debts', { forceRefresh });
+      setDebts(items);
+      if (isOnline) {
+        try {
+          const res = await api.get('/debts', { params: { limit: 50 } });
+          if (res.success && Array.isArray(res.debts)) { setDebts(res.debts); setNextCursor(res.nextCursor || null); }
+        } catch { /* keep cached */ }
+      }
+    } catch { showToast(t('common.failed'), 'error'); } finally { setLoading(false); }
   };
 
   const handleSubmit = async (e) => {
@@ -410,6 +423,17 @@ function DebtActionsMenu({ debt, remaining, t, onView, onPay, onRemind, onEdit, 
             ))}
           </div>
         </>
+      )}
+      {nextCursor && (
+        <div className="p-4 text-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-4 py-2 rounded-xl bg-white text-primary-700 border border-primary-200 text-sm font-semibold hover:bg-primary-50 disabled:opacity-50"
+          >
+            {loadingMore ? t('common.loading') : t('common.load_more')}
+          </button>
+        </div>
       )}
     </div>
   );

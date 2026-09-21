@@ -8,12 +8,16 @@ import StatusBadge from '../components/StatusBadge';
 import { fetchFromCacheOrApi, createOffline, deleteOffline } from '../db/helpers';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import { rowActivate } from '../utils/rowActivate';
+import { useLoadMore } from '../hooks/useLoadMore';
 
 export default function Contacts() {
   const { t, lang } = useLang();
   const { showToast } = useToast();
   const { isOnline } = useOnlineStatus();
   const [contacts, setContacts] = useState([]);
+  const { nextCursor, setNextCursor, loadMore, loadingMore } = useLoadMore('contacts', (items) =>
+    setContacts((prev) => [...prev, ...items])
+  );
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -37,6 +41,16 @@ export default function Contacts() {
     try {
       const items = await fetchFromCacheOrApi('contacts', { forceRefresh });
       setContacts(items);
+      // Capture the first-page cursor so older contacts can be loaded on demand.
+      if (isOnline) {
+        try {
+          const res = await api.get('/contacts', { params: { limit: 50 } });
+          if (res.success && Array.isArray(res.contacts)) {
+            setContacts(res.contacts);
+            setNextCursor(res.nextCursor || null);
+          }
+        } catch { /* keep cached list */ }
+      }
     } catch { showToast(t('contacts.failed'), 'error'); }
     finally { setLoading(false); }
   };
@@ -290,6 +304,17 @@ export default function Contacts() {
                   </div>
                 ))}
               </div>
+              {nextCursor && (
+                <div className="p-4 text-center">
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="px-4 py-2 rounded-xl bg-white text-primary-700 border border-primary-200 text-sm font-semibold hover:bg-primary-50 disabled:opacity-50"
+                  >
+                    {loadingMore ? t('common.loading') : t('common.load_more')}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
