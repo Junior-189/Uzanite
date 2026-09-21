@@ -18,6 +18,7 @@ import { TokenService } from '../../security/token.service';
 import { hashPassword } from '../../security/password';
 import { FeatureFlagsService } from './feature-flags.service';
 import { newId } from '../../ids/id';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 import { runAsSystem } from '../../context/tenant-context';
 
 // Labels shown in the admin UI for sub-admin permissions.
@@ -157,7 +158,7 @@ export class AdminUsersService {
         _id: m.user.id,
         id: m.user.id,
         name: m.user.name,
-        email: m.user.email,
+        email: decryptPii(m.user.email),
         role: 'tenant',
         status,
         businessId: m.tenant.id,
@@ -224,7 +225,7 @@ export class AdminUsersService {
     return {
       success: true,
       message: `User ${account.user.name} approved successfully`,
-      user: { id: account.user.id, name: account.user.name, email: account.user.email, status: 'approved' },
+      user: { id: account.user.id, name: account.user.name, email: decryptPii(account.user.email), status: 'approved' },
     };
   }
 
@@ -237,7 +238,7 @@ export class AdminUsersService {
     return {
       success: true,
       message: `User ${account.user.name} rejected`,
-      user: { id: account.user.id, name: account.user.name, email: account.user.email, status: 'rejected', rejectionReason: input.reason },
+      user: { id: account.user.id, name: account.user.name, email: decryptPii(account.user.email), status: 'rejected', rejectionReason: input.reason },
     };
   }
 
@@ -260,7 +261,9 @@ export class AdminUsersService {
   async updateEmail(userId: string, email: string) {
     const account = await this.getAccountOrThrow(userId);
     try {
-      await runAsSystem(() => this.prisma.db.user.update({ where: { id: account.user.id }, data: { email } }));
+      await runAsSystem(() =>
+        this.prisma.db.user.update({ where: { id: account.user.id }, data: { email: encryptPii(email) ?? '', emailIdx: blindIndex(email) } })
+      );
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException('Email already in use');
@@ -347,11 +350,11 @@ export class AdminUsersService {
     return {
       success: true,
       token,
-      impersonation: { active: true, by: actor?.email ?? '', expiresInSeconds: 1800, pagePermissions },
+      impersonation: { active: true, by: actor ? decryptPii(actor.email) : '', expiresInSeconds: 1800, pagePermissions },
       user: {
         _id: account.user.id,
         name: account.user.name,
-        email: account.user.email,
+        email: decryptPii(account.user.email),
         role: 'tenant',
         businessId: account.tenant.id,
         status: 'approved',
@@ -371,7 +374,7 @@ export class AdminUsersService {
         orderBy: { createdAt: 'desc' },
       })
     );
-    const rows = users.map((u) => ({ ...u, _id: u.id, suspended: u.status === 'suspended' }));
+    const rows = users.map((u) => ({ ...u, _id: u.id, email: decryptPii(u.email), suspended: u.status === 'suspended' }));
     return { success: true, users: rows, permissions: SUB_ADMIN_PERMISSION_LABELS };
   }
 
@@ -391,7 +394,8 @@ export class AdminUsersService {
           data: {
             id: newId(),
             name: input.name,
-            email: input.email,
+            email: encryptPii(input.email) ?? '',
+            emailIdx: blindIndex(input.email),
             passwordHash,
             platformRole: 'sub_admin',
             status: 'active',
@@ -400,7 +404,7 @@ export class AdminUsersService {
           select: SUB_ADMIN_SELECT,
         })
       );
-      return { success: true, message: `Sub-admin "${user.name}" created`, user: { ...user, _id: user.id } };
+      return { success: true, message: `Sub-admin "${user.name}" created`, user: { ...user, _id: user.id, email: decryptPii(user.email) } };
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException('Email already in use');
@@ -413,13 +417,16 @@ export class AdminUsersService {
     await this.getSubAdminOrThrow(id);
     const data: Prisma.UserUncheckedUpdateInput = {};
     if (input.name !== undefined) data.name = input.name;
-    if (input.email !== undefined) data.email = input.email;
+    if (input.email !== undefined) {
+      data.email = encryptPii(input.email) ?? '';
+      data.emailIdx = blindIndex(input.email);
+    }
     if (input.permissions !== undefined) data.permissions = input.permissions;
     try {
       const user = await runAsSystem(() =>
         this.prisma.db.user.update({ where: { id }, data, select: SUB_ADMIN_SELECT })
       );
-      return { success: true, message: 'Sub-admin updated', user: { ...user, _id: user.id } };
+      return { success: true, message: 'Sub-admin updated', user: { ...user, _id: user.id, email: decryptPii(user.email) } };
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException('Email already in use');

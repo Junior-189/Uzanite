@@ -15,7 +15,7 @@ import { LockoutService } from '../../security/lockout.service';
 import { TotpService } from '../../security/totp.service';
 import { hashPassword, assertPasswordPolicy, verifyPasswordDetailed } from '../../security/password';
 import { newId } from '../../ids/id';
-import { blindIndex, decryptPii } from '../../security/pii';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 import { randomToken, sha256 } from '../../crypto/crypto';
 import { runAsSystem } from '../../context/tenant-context';
 import { OutboxService } from '../../outbox/outbox.service';
@@ -50,7 +50,7 @@ export class AuthService {
 
   async register(input: RegisterInput) {
     assertPasswordPolicy(input.password);
-    const existing = await this.prisma.db.user.findUnique({ where: { email: input.email } });
+    const existing = await this.prisma.db.user.findFirst({ where: { OR: [{ emailIdx: blindIndex(input.email) }, { email: input.email }] } });
     if (existing) throw new ConflictException('Email already registered');
 
     const tenantId = newId();
@@ -67,7 +67,8 @@ export class AuthService {
         await tx.user.create({
           data: {
             id: userId,
-            email: input.email,
+            email: encryptPii(input.email) ?? '',
+            emailIdx: blindIndex(input.email),
             name: input.name,
             phone: input.phone || null,
             passwordHash,
@@ -130,7 +131,7 @@ export class AuthService {
       user: {
         id: user.id,
         name: user.name,
-        email: user.email,
+        email: decryptPii(user.email),
         platformRole: user.platformRole,
         tenantId: membership?.tenantId ?? null,
         role: membership?.role ?? null,
@@ -155,7 +156,9 @@ export class AuthService {
       );
     }
 
-    const user = await this.prisma.db.user.findFirst({ where: { email: input.email, deletedAt: null } });
+    const user = await this.prisma.db.user.findFirst({
+      where: { deletedAt: null, OR: [{ emailIdx: blindIndex(input.email) }, { email: input.email }] },
+    });
     if (!user) {
       await this.recordLogin(input.email, null, 'failed', 'User not found', meta);
       await this.lockout.recordFailure(input.email);
@@ -202,11 +205,11 @@ export class AuthService {
     if (user.tokenVersion !== challenge.tokenVersion) throw new UnauthorizedException('Session expired. Please sign in again.');
 
     if (!(await this.totp.verifyForUser(user.id, code))) {
-      await this.recordLogin(user.email, user.id, 'failed', 'Invalid 2FA code', meta);
+      await this.recordLogin(decryptPii(user.email), user.id, 'failed', 'Invalid 2FA code', meta);
       throw new UnauthorizedException('Invalid authentication code');
     }
 
-    await this.recordLogin(user.email, user.id, user.status === 'pending' ? 'pending' : 'success', '2FA verified', meta);
+    await this.recordLogin(decryptPii(user.email), user.id, user.status === 'pending' ? 'pending' : 'success', '2FA verified', meta);
     return this.issueSession(user, meta);
   }
 
@@ -352,6 +355,7 @@ export class AuthService {
       success: true,
       user: {
         ...rest,
+        email: decryptPii(rest.email),
         totpEnabled: !!totpEnabledAt,
         tenantId: membership?.tenantId ?? null,
         role: membership?.role ?? null,
@@ -421,7 +425,7 @@ export class AuthService {
     }
 
     // ── Tenant / admin user ──
-    let user = await this.prisma.db.user.findFirst({ where: { email, deletedAt: null } });
+    let user = await this.prisma.db.user.findFirst({ where: { deletedAt: null, OR: [{ emailIdx: blindIndex(email) }, { email }] } });
     let isNew = false;
     if (!user) {
       const tenantId = newId();
@@ -431,7 +435,7 @@ export class AuthService {
           await tx.tenant.create({ data: { id: tenantId, slug: `biz_${randomToken(6)}`, name: `${name}'s Shop`, status: 'pending' } });
           await tx.tenantSettings.create({ data: { tenantId } });
           await tx.user.create({
-            data: { id: userId, email, name, avatarUrl: payload.picture ?? null, authProvider: 'google', status: 'pending' },
+            data: { id: userId, email: encryptPii(email) ?? '', emailIdx: blindIndex(email), name, avatarUrl: payload.picture ?? null, authProvider: 'google', status: 'pending' },
           });
           await tx.membership.create({ data: { id: newId(), userId, tenantId, role: 'owner', status: 'active' } });
           await tx.subscription.create({ data: { id: newId(), tenantId, planKey: 'free', status: 'active' } });
@@ -480,7 +484,7 @@ export class AuthService {
   }
 
   async forgotPassword(email: string) {
-    const user = await this.prisma.db.user.findFirst({ where: { email, deletedAt: null } });
+    const user = await this.prisma.db.user.findFirst({ where: { deletedAt: null, OR: [{ emailIdx: blindIndex(email) }, { email }] } });
     // Always return success to avoid account enumeration.
     if (!user) return { success: true, message: 'If that email exists, a reset link has been sent.' };
 
@@ -500,7 +504,7 @@ export class AuthService {
     await this.outbox.enqueue({
       type: 'email.send',
       payload: {
-        to: user.email,
+        to: decryptPii(user.email),
         subject: 'Reset your UZANITE password',
         html: `<h2>Password Reset</h2><p>Hello ${user.name},</p><p>Click the link below to reset your password. It expires in 1 hour.</p><p><a href="${link}">Reset password</a></p>`,
       },

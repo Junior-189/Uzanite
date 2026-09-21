@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ActivityLogsQuery, LoginAttemptsQuery } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { runAsSystem } from '../../context/tenant-context';
+import { decryptPii } from '../../security/pii';
 
 function dateRange(startDate?: string, endDate?: string): { gte?: Date; lte?: Date } | undefined {
   const range: { gte?: Date; lte?: Date } = {};
@@ -33,7 +34,7 @@ export class AdminLogsService {
         select: { id: true, name: true, email: true, platformRole: true },
       })
     );
-    return new Map(users.map((u) => [u.id, { name: u.name, email: u.email, role: u.platformRole }]));
+    return new Map(users.map((u) => [u.id, { name: u.name, email: decryptPii(u.email), role: u.platformRole }]));
   }
 
   async activityLogs(query: ActivityLogsQuery) {

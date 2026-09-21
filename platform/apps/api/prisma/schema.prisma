@@ -266,7 +266,9 @@ model TenantPaymentMethod {
 // ── Identity ─────────────────────────────────────────────────────────────────
 model User {
   id                 String        @id @db.Uuid
-  email              String        @unique @db.Citext
+  email              String
+  // Blind index (HMAC) for equality lookup on the encrypted email.
+  emailIdx           String?       @unique @map("email_idx")
   legacyId           String?       @unique @map("legacy_id")
   passwordHash       String?       @map("password_hash")
   name               String

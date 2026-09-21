@@ -23,6 +23,7 @@ import { BillingService } from '../billing/billing.service';
 import { assertPasswordPolicy, hashPassword } from '../../security/password';
 import { randomToken, sha256 } from '../../crypto/crypto';
 import { newId } from '../../ids/id';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 import { paginate } from '../../pagination/pagination';
 
 export interface MembershipActor {
@@ -64,7 +65,15 @@ export class MembershipsService {
       limit: query.limit,
       cursor: query.cursor ?? null,
     });
-    return { success: true, count: page.items.length, members: page.items, nextCursor: page.nextCursor };
+    const members = (page.items as Array<{ user?: { email?: string } }>).map((m) =>
+      m.user ? { ...m, user: { ...m.user, email: decryptPii(m.user.email) } } : m
+    );
+    return { success: true, count: members.length, members, nextCursor: page.nextCursor };
+  }
+
+  /** Decrypts the member's user email for API output. */
+  private memberOut<T extends { user?: { email?: string | null } }>(member: T): T {
+    return member?.user ? { ...member, user: { ...member.user, email: decryptPii(member.user.email) } } : member;
   }
 
   private isOwnerOrAdmin(actor: MembershipActor): boolean {
@@ -115,7 +124,7 @@ export class MembershipsService {
     const permissions = this.resolvePermissions(input.role, input.permissions);
     this.assertCanGrant(permissions, actor);
 
-    const user = await this.prisma.db.user.findFirst({ where: { email: input.email, deletedAt: null } });
+    const user = await this.prisma.db.user.findFirst({ where: { deletedAt: null, OR: [{ emailIdx: blindIndex(input.email) }, { email: input.email }] } });
     if (!user) throw new NotFoundException('No account exists for that email yet');
 
     const existing = await this.prisma.db.membership.findFirst({ where: { userId: user.id, tenantId } });
@@ -139,7 +148,7 @@ export class MembershipsService {
 
     await this.cache.invalidateMembership(user.id, tenantId);
     await this.log(tenantId, actor, 'member.added', user.id);
-    return { success: true, member: membership };
+    return { success: true, member: this.memberOut(membership) };
   }
 
   async update(tenantId: string, membershipId: string, input: UpdateMemberInput, actor: MembershipActor) {
@@ -178,7 +187,7 @@ export class MembershipsService {
     });
     await this.cache.invalidateMembership(target.userId, tenantId);
     await this.log(tenantId, actor, 'member.updated', target.userId);
-    return { success: true, member: membership };
+    return { success: true, member: this.memberOut(membership) };
   }
 
   async remove(tenantId: string, membershipId: string, actor: MembershipActor) {
@@ -206,7 +215,7 @@ export class MembershipsService {
     // and then blocked at acceptance.
     await this.assertStaffSeatAvailable(tenantId);
 
-    const existingUser = await this.prisma.db.user.findFirst({ where: { email: input.email, deletedAt: null } });
+    const existingUser = await this.prisma.db.user.findFirst({ where: { deletedAt: null, OR: [{ emailIdx: blindIndex(input.email) }, { email: input.email }] } });
     if (existingUser) {
       const active = await this.prisma.db.membership.findFirst({
         where: { userId: existingUser.id, tenantId, status: 'active' },
@@ -258,12 +267,13 @@ export class MembershipsService {
           throw new UnauthorizedException('Invalid or expired invitation');
         }
 
-        let user = await this.prisma.db.user.findFirst({ where: { email: invite.email, deletedAt: null } });
+        let user = await this.prisma.db.user.findFirst({ where: { deletedAt: null, OR: [{ emailIdx: blindIndex(invite.email) }, { email: invite.email }] } });
         if (!user) {
           user = await this.prisma.db.user.create({
             data: {
               id: newId(),
-              email: invite.email,
+              email: encryptPii(invite.email) ?? '',
+              emailIdx: blindIndex(invite.email),
               name: input.name,
               passwordHash: await hashPassword(input.password),
               status: 'active',

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
+import { decryptPii } from '../../src/security/pii';
 import { AdminUsersService } from '../../src/modules/admin/admin-users.service';
 import { FeatureFlagsService } from '../../src/modules/admin/feature-flags.service';
 
@@ -82,7 +83,7 @@ d('admin users (Postgres)', () => {
     await admin.updateEmail(userId, 'new@shop.com');
     const afterEdit = await h.prisma.base.user.findUnique({ where: { id: userId } });
     expect(afterEdit!.name).toBe('New Name');
-    expect(afterEdit!.email).toBe('new@shop.com');
+    expect(decryptPii(afterEdit!.email)).toBe('new@shop.com');
 
     const before = afterEdit!.tokenVersion;
     const res = await admin.resetPassword(userId, 'brandnew123');

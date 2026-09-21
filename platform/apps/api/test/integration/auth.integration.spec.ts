@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { generate } from 'otplib';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
+import { blindIndex } from '../../src/security/pii';
+import { isEncrypted } from '@uzanite/messaging';
 
 const d = hasDb ? describe : describe.skip;
 
@@ -25,7 +27,7 @@ d('auth integration (Postgres)', () => {
       phone: '',
     } as never);
     await h.prisma.base.tenant.update({ where: { slug: (reg.user as { slug: string }).slug }, data: { status: 'approved' } });
-    await h.prisma.base.user.update({ where: { email }, data: { status: 'active' } });
+    await h.prisma.base.user.update({ where: { emailIdx: blindIndex(email) }, data: { status: 'active' } });
     return reg;
   }
 
@@ -90,12 +92,12 @@ d('auth integration (Postgres)', () => {
     await registerAndApprove('e@example.com');
     const bcrypt = await import('bcryptjs');
     const legacyHash = await bcrypt.hash('Str0ng!Passw0rd', 10);
-    await h.prisma.base.user.update({ where: { email: 'e@example.com' }, data: { passwordHash: legacyHash } });
+    await h.prisma.base.user.update({ where: { emailIdx: blindIndex('e@example.com') }, data: { passwordHash: legacyHash } });
 
     const login = await h.auth.login({ email: 'e@example.com', password: 'Str0ng!Passw0rd' } as never, {});
     expect(login.success).toBe(true);
 
-    const user = await h.prisma.base.user.findFirst({ where: { email: 'e@example.com' } });
+    const user = await h.prisma.base.user.findFirst({ where: { emailIdx: blindIndex('e@example.com') } });
     expect(user?.passwordHash?.startsWith('$argon2id$')).toBe(true);
   });
 
@@ -107,5 +109,15 @@ d('auth integration (Postgres)', () => {
     await expect(h.auth.login({ email: 'c@example.com', password: 'Str0ng!Passw0rd' } as never, {})).rejects.toMatchObject({
       status: 429,
     });
+  });
+
+  it('encrypts the user email at rest with a blind index and logs in by it', async () => {
+    await registerAndApprove('user-pii@example.com');
+    const raw = await h.prisma.base.user.findFirst({ where: { emailIdx: blindIndex('user-pii@example.com') } });
+    expect(raw).toBeTruthy();
+    expect(isEncrypted(raw!.email)).toBe(true);
+
+    const login = await h.auth.login({ email: 'user-pii@example.com', password: 'Str0ng!Passw0rd' } as never, {});
+    expect(login.user.email).toBe('user-pii@example.com');
   });
 });
