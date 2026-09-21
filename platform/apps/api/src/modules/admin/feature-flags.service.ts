@@ -38,10 +38,11 @@ export class FeatureFlagsService {
   }
 
   /** Every effective flag for a tenant, tenant rows overriding global ones. */
-  effectiveFlags(tenantId: string | null): Promise<Record<string, boolean>> {
+  async effectiveFlags(tenantId: string | null): Promise<Record<string, boolean>> {
+    const gen = await this.cache.flagsGeneration();
     return this.cache.wrap(
       'feature_flags',
-      `flags:${tenantId ?? 'global'}`,
+      `flags:${gen}:${tenantId ?? 'global'}`,
       FeatureFlagsService.CACHE_TTL_SECONDS,
       () =>
         runAsSystem(async () => {
@@ -204,8 +205,8 @@ export class FeatureFlagsService {
    * tenants cheaply, so the short TTL is what bounds staleness there; the
    * global key itself is dropped immediately.
    */
-  private async invalidate(tenantId: string | null): Promise<void> {
-    await this.cache.del(`flags:${tenantId ?? 'global'}`);
-    if (!tenantId) await this.cache.del('flags:global');
+  private async invalidate(_tenantId: string | null): Promise<void> {
+    // Re-key all resolved flag entries; correct for global and tenant changes.
+    await this.cache.bumpFlagsGeneration();
   }
 }

@@ -58,8 +58,11 @@ export class WhatsAppWebhookService {
   verifyChallenge(mode?: string, token?: string, challenge?: string): { ok: boolean; challenge?: string } {
     const expected = process.env.META_VERIFY_TOKEN;
     if (!expected) return { ok: false };
-    if (mode === 'subscribe' && token === expected) return { ok: true, challenge };
-    return { ok: false };
+    if (mode !== 'subscribe' || !token) return { ok: false };
+    const a = Buffer.from(token);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false };
+    return { ok: true, challenge };
   }
 
   verifySignature(rawBody: string | Buffer | undefined, header: string | undefined): boolean {

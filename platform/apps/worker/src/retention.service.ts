@@ -34,6 +34,7 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
   private readonly intervalMs: number;
   private readonly batchSize: number;
   private readonly policy: Array<{ table: string; column: string; days: number; label: string }>;
+  private readonly messageDays: number;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
@@ -78,6 +79,10 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
         label: 'activity/audit logs',
       },
     ];
+
+    // Message bodies are personal data. Redacted (not deleted) so delivery
+    // history stays intact. 0 disables (opt-in for existing deployments).
+    this.messageDays = days('RETENTION_MESSAGE_DAYS', 0);
   }
 
   async onApplicationBootstrap(): Promise<void> {
@@ -118,6 +123,19 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
         }
       }
 
+      if (this.messageDays > 0) {
+        let redacted = 0;
+        for (;;) {
+          const count = await this.redactMessageBatch(this.messageDays);
+          redacted += count;
+          if (count < this.batchSize) break;
+        }
+        if (redacted > 0) {
+          deleted.messages_redacted = redacted;
+          this.logger.log(`Retention: redacted ${redacted} message body(ies) older than ${this.messageDays}d`);
+        }
+      }
+
       if (Object.keys(deleted).length === 0) {
         this.logger.debug('Retention sweep: nothing past its retention period');
       }
@@ -148,6 +166,24 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
          WHERE ctid IN (
            SELECT ctid FROM "${safeTable}"
            WHERE "${safeColumn}" < $1
+           LIMIT $2
+         )`,
+        cutoff,
+        this.batchSize
+      );
+    });
+  }
+
+  /** Pseudonymises old message bodies/payloads (keeps delivery metadata). */
+  private async redactMessageBatch(days: number): Promise<number> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', true)`;
+      return tx.$executeRawUnsafe(
+        `UPDATE "messages" SET "text" = '[redacted]', "raw" = '{}'::jsonb
+         WHERE ctid IN (
+           SELECT ctid FROM "messages"
+           WHERE "created_at" < $1 AND "text" <> '[redacted]'
            LIMIT $2
          )`,
         cutoff,

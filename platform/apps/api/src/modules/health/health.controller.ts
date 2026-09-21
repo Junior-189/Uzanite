@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req, Res } from '@nestjs/common';
+import { Controller, Get, Req, Res } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
@@ -56,15 +56,11 @@ export class HealthController {
   // leak tenant/business data or dependency state.
   @Public()
   @Get('metrics')
-  async metricsEndpoint(
-    @Req() req: Request,
-    @Query('token') queryToken: string | undefined,
-    @Res() res: Response
-  ) {
+  async metricsEndpoint(@Req() req: Request, @Res() res: Response) {
     const expected = this.config.get<string>('METRICS_TOKEN') ?? '';
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     if (expected) {
-      const provided = (req.headers['x-metrics-token'] as string | undefined) || queryToken;
+      const provided = req.headers['x-metrics-token'] as string | undefined;
       // Constant-time compare so the token cannot be recovered byte-by-byte
       // from response timing.
       if (!provided || !safeEqual(provided, expected)) {

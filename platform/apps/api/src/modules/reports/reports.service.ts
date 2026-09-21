@@ -329,7 +329,9 @@ export class ReportsService {
 
   toCsv(datasets: Dataset[]): string {
     const esc = (v: string | number) => {
-      const s = String(v ?? '');
+      let s = String(v ?? '');
+      // Neutralise spreadsheet formula injection (leading = + - @).
+      if (/^[=+\-@]/.test(s)) s = `'${s}`;
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const blocks = datasets.map((d) => {

@@ -702,6 +702,7 @@ model Payment {
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, orderId, createdAt])
+  @@index([tenantId, id])
   @@map("payments")
 }
 
@@ -747,6 +748,7 @@ model LedgerEntry {
   @@index([tenantId, createdAt])
   @@index([tenantId, type, createdAt])
   @@index([tenantId, refType, refId])
+  @@index([tenantId, id])
   @@map("ledger_entries")
 }
 
@@ -894,6 +896,7 @@ model Receipt {
   @@index([tenantId, createdAt])
   @@index([tenantId, orderId])
   @@index([tenantId, paymentId])
+  @@index([tenantId, id])
   @@map("receipts")
 }
 
@@ -1062,6 +1065,7 @@ model Message {
   @@unique([tenantId, providerMessageId])
   @@index([tenantId, status, availableAt])
   @@index([tenantId, createdAt])
+  @@index([tenantId, id])
   @@map("messages")
 }
 
@@ -1126,6 +1130,7 @@ model FlowTrace {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, contactPhone, createdAt])
+  @@index([tenantId, id])
   @@map("flow_traces")
 }
 
@@ -1148,6 +1153,7 @@ model PrivacyRequest {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, subjectRef, createdAt])
+  @@index([tenantId, id])
   @@map("privacy_requests")
 }
 
@@ -1229,6 +1235,7 @@ model Debt {
   @@index([tenantId, status])
   @@index([tenantId, deletedAt])
   @@index([tenantId, createdAt])
+  @@index([tenantId, id])
   @@map("debts")
 }
 

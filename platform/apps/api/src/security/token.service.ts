@@ -109,10 +109,20 @@ export class TokenService {
 
     const newRaw = randomToken(48);
     const newHash = sha256(newRaw);
-    await this.prisma.db.refreshToken.update({
-      where: { id: existing.id },
+    // Compare-and-swap: only the request that revokes the current token wins the
+    // rotation. A concurrent second use sees count 0 and its whole family is
+    // revoked (treat as a leaked-token replay).
+    const claimed = await this.prisma.db.refreshToken.updateMany({
+      where: { id: existing.id, revokedAt: null },
       data: { revokedAt: new Date(), replacedBy: newHash },
     });
+    if (claimed.count === 0) {
+      await this.prisma.db.refreshToken.updateMany({
+        where: { principalId: existing.principalId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return null;
+    }
     await this.prisma.db.refreshToken.create({
       data: {
         id: newId(),

@@ -36,7 +36,7 @@ export const envSchema = z
     REDIS_URL: z.string().optional().default(''),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
     JWT_ACCESS_TTL: z.string().default('15m'),
-    JWT_REFRESH_TTL_DAYS: z.coerce.number().int().default(30),
+    JWT_REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
     // Optional key set for `kid`-based rotation: JSON array of
     // [{ "kid": "...", "secret": "..." }]. `JWT_ACTIVE_KID` selects the signing
     // key; tokens are verified against their header `kid`. Falls back to
@@ -117,6 +117,7 @@ export const envSchema = z
     require(cfg.RLS_ENABLED === 'true', 'RLS_ENABLED', 'RLS_ENABLED must be "true" in production (non-owner DB role)');
     require(!!cfg.REDIS_URL, 'REDIS_URL', 'REDIS_URL is required in production (shared rate limits, lockouts, queues)');
     require(!!cfg.ENCRYPTION_KEY, 'ENCRYPTION_KEY', 'ENCRYPTION_KEY is required in production (encrypts per-tenant Meta tokens)');
+    require(!!cfg.STORAGE_SIGNING_SECRET, 'STORAGE_SIGNING_SECRET', 'STORAGE_SIGNING_SECRET is required in production (signed private-file URLs)');
     const origins = cfg.CORS_ORIGINS.split(',')
       .map((o) => o.trim())
       .filter(Boolean);
