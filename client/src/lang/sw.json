@@ -1502,5 +1502,15 @@
   "approval.waiting_title": "Inasubiri idhini",
   "approval.waiting_desc": "Tafadhali subiri msimamizi aidhinishe akaunti yako.",
   "approval.whatsapp_title": "Uthibitishaji wa WhatsApp",
-  "approval.whatsapp_desc": "Unganisha WhatsApp yako ili kuendelea."
+  "approval.whatsapp_desc": "Unganisha WhatsApp yako ili kuendelea.",
+  "nav.dashboard": "Dashibodi",
+  "nav.orders": "Maagizo",
+  "nav.products": "Bidhaa",
+  "nav.expenses": "Gharama",
+  "nav.reports": "Ripoti",
+  "nav.business": "Mipangilio",
+  "nav.adminPanel": "Jopo la Usimamizi",
+  "nav.activityLog": "Shughuli",
+  "nav.recycleBin": "Kijalala",
+  "nav.notifications": "Arifa"
 }

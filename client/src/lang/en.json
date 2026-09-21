@@ -1502,5 +1502,15 @@
   "approval.waiting_title": "Waiting for approval",
   "approval.waiting_desc": "Please wait for an administrator to approve your account.",
   "approval.whatsapp_title": "WhatsApp verification",
-  "approval.whatsapp_desc": "Connect your WhatsApp to continue."
+  "approval.whatsapp_desc": "Connect your WhatsApp to continue.",
+  "nav.dashboard": "Dashboard",
+  "nav.orders": "Orders",
+  "nav.products": "Products",
+  "nav.expenses": "Expenses",
+  "nav.reports": "Reports",
+  "nav.business": "Settings",
+  "nav.adminPanel": "Admin Panel",
+  "nav.activityLog": "Activity Log",
+  "nav.recycleBin": "Recycle Bin",
+  "nav.notifications": "Notifications"
 }

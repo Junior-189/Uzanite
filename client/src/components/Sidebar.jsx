@@ -9,13 +9,13 @@ import UzerLogo from './UzerLogo';
 import api from '../utils/api';
 
 const tenantNavItems = [
-  { page: 'dashboard', icon: 'fas fa-chart-line', labelSw: 'Dashibodi', labelEn: 'Dashboard' },
-  { page: 'orders', icon: 'fas fa-clipboard-list', labelSw: 'Maagizo', labelEn: 'Orders', badge: 'pendingBadge' },
-  { page: 'products', icon: 'fas fa-tag', labelSw: 'Bidhaa', labelEn: 'Products' },
-  { page: 'expenses', icon: 'fas fa-receipt', labelSw: 'Gharama', labelEn: 'Expenses' },
-  { page: 'purchases', icon: 'fas fa-shopping-cart', labelSw: 'Manunuzi', labelEn: 'Purchases', navKey: 'nav.purchases' },
-  { page: 'debts', icon: 'fas fa-hand-holding-usd', labelSw: 'Madeni', labelEn: 'Debts', navKey: 'nav.debts' },
-  { page: 'staff', icon: 'fas fa-users', labelSw: 'Wafanyakazi', labelEn: 'Staff', ownerOnly: true, navKey: 'nav.staff' },
+  { page: 'dashboard', icon: 'fas fa-chart-line', navKey: 'nav.dashboard' },
+  { page: 'orders', icon: 'fas fa-clipboard-list', navKey: 'nav.orders', badge: 'pendingBadge' },
+  { page: 'products', icon: 'fas fa-tag', navKey: 'nav.products' },
+  { page: 'expenses', icon: 'fas fa-receipt', navKey: 'nav.expenses' },
+  { page: 'purchases', icon: 'fas fa-shopping-cart', navKey: 'nav.purchases' },
+  { page: 'debts', icon: 'fas fa-hand-holding-usd', navKey: 'nav.debts' },
+  { page: 'staff', icon: 'fas fa-users', ownerOnly: true, navKey: 'nav.staff' },
   {
     type: 'group',
     key: 'marketing',
@@ -29,14 +29,14 @@ const tenantNavItems = [
       { page: 'offline_sms', icon: 'fas fa-sms', navKey: 'nav.offline_sms', comingSoon: true },
     ],
   },
-  { page: 'reports', icon: 'fas fa-file-pdf', labelSw: 'Ripoti', labelEn: 'Reports' },
-  { page: 'business', icon: 'fas fa-cog', labelSw: 'Mipangilio', labelEn: 'Settings' },
+  { page: 'reports', icon: 'fas fa-file-pdf', navKey: 'nav.reports' },
+  { page: 'business', icon: 'fas fa-cog', navKey: 'nav.business' },
 ];
 
 const adminNavItems = [
-  { page: 'adminPanel', icon: 'fas fa-shield-alt', labelSw: 'Wasimamizi', labelEn: 'Admin Panel', badge: 'pendingUsersBadge' },
-  { page: 'activityLog', icon: 'fas fa-history', labelSw: 'Shughuli', labelEn: 'Activity Log' },
-  { page: 'recycleBin', icon: 'fas fa-trash-restore', labelSw: 'Kijalala', labelEn: 'Recycle Bin' },
+  { page: 'adminPanel', icon: 'fas fa-shield-alt', navKey: 'nav.adminPanel', badge: 'pendingUsersBadge' },
+  { page: 'activityLog', icon: 'fas fa-history', navKey: 'nav.activityLog' },
+  { page: 'recycleBin', icon: 'fas fa-trash-restore', navKey: 'nav.recycleBin' },
 ];
 
 export default function Sidebar({ open, onClose }) {
@@ -118,7 +118,7 @@ export default function Sidebar({ open, onClose }) {
                     }`}
                   >
                     <i className={`fas ${item.icon} w-5 text-center text-xs ${groupActive ? 'text-primary-400' : ''}`}></i>
-                    <span className="flex-1 text-left">{item.navKey ? t(item.navKey) : (lang === 'sw' ? item.labelSw : item.labelEn)}</span>
+                    <span className="flex-1 text-left">{t(item.navKey)}</span>
                     <i className={`fas fa-chevron-${open ? 'down' : 'right'} text-[10px] text-slate-500`}></i>
                   </button>
                   {open && (
@@ -141,7 +141,7 @@ export default function Sidebar({ open, onClose }) {
                             }`}
                           >
                             <i className={`${child.icon} w-5 text-center text-xs ${isActive ? 'text-primary-400' : ''}`}></i>
-                            <span className="flex-1 text-left">{child.navKey ? t(child.navKey) : (lang === 'sw' ? child.labelSw : child.labelEn)}</span>
+                            <span className="flex-1 text-left">{t(child.navKey)}</span>
                             {child.comingSoon && (
                               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-white/10 text-slate-400">soon</span>
                             )}
@@ -167,7 +167,7 @@ export default function Sidebar({ open, onClose }) {
                 }`}
               >
                 <i className={`fas ${item.icon} w-5 text-center text-xs ${isActive ? 'text-primary-400' : ''}`}></i>
-                <span className="flex-1 text-left">{item.navKey ? t(item.navKey) : (lang === 'sw' ? item.labelSw : item.labelEn)}</span>
+                <span className="flex-1 text-left">{t(item.navKey)}</span>
                 {item.badge === 'pendingBadge' && pendingCount > 0 && (
                   <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{pendingCount}</span>
                 )}

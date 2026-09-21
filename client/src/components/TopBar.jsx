@@ -6,23 +6,6 @@ import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
 import UzerLogo from './UzerLogo';
 
-const pageLabels = {
-  dashboard: { en: 'Dashboard', sw: 'Dashibodi' },
-  orders: { en: 'Orders', sw: 'Maagizo' },
-  products: { en: 'Products', sw: 'Bidhaa' },
-  expenses: { en: 'Expenses', sw: 'Gharama' },
-  purchases: { en: 'Purchases', sw: 'Manunuzi' },
-  debts: { en: 'Debts', sw: 'Madeni' },
-  staff: { en: 'Staff', sw: 'Wafanyakazi' },
-  whatsapp: { en: 'WhatsApp', sw: 'WhatsApp' },
-  reports: { en: 'Reports', sw: 'Ripoti' },
-  business: { en: 'Settings', sw: 'Mipangilio' },
-  adminPanel: { en: 'Admin Panel', sw: 'Jopo la Usimamizi' },
-  activityLog: { en: 'Activity Log', sw: 'Shughuli' },
-  recycleBin: { en: 'Recycle Bin', sw: 'Kijalala' },
-  notifications: { en: 'Notifications', sw: 'Arifa' },
-};
-
 export default function TopBar({ onMenuToggle }) {
   const { user, logout } = useAuth();
   const { lang, toggleLanguage, t } = useLang();
@@ -52,7 +35,7 @@ export default function TopBar({ onMenuToggle }) {
   const [showProfile, setShowProfile] = useState(false);
 
   const activePage = location.pathname.replace('/admin/', '').replace('/admin', '') || 'dashboard';
-  const pageTitle = pageLabels[activePage]?.[lang] || pageLabels[activePage]?.en || 'Dashboard';
+  const pageTitle = activePage ? t(`nav.${activePage}`) : '';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
