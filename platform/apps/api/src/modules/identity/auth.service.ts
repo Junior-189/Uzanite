@@ -15,6 +15,7 @@ import { LockoutService } from '../../security/lockout.service';
 import { TotpService } from '../../security/totp.service';
 import { hashPassword, assertPasswordPolicy, verifyPasswordDetailed } from '../../security/password';
 import { newId } from '../../ids/id';
+import { blindIndex, decryptPii } from '../../security/pii';
 import { randomToken, sha256 } from '../../crypto/crypto';
 import { runAsSystem } from '../../context/tenant-context';
 import { OutboxService } from '../../outbox/outbox.service';
@@ -395,7 +396,9 @@ export class AuthService {
     const name = payload.name || email.split('@')[0];
 
     // ── Staff by email ──
-    const staff = await runAsSystem(() => this.prisma.db.staff.findUnique({ where: { email } }));
+    const staff = await runAsSystem(() =>
+      this.prisma.db.staff.findFirst({ where: { OR: [{ emailIdx: blindIndex(email) }, { email }] } })
+    );
     if (staff) {
       if (staff.status !== 'active') throw new ForbiddenException('Account is inactive. Contact your manager.');
       await runAsSystem(() => this.prisma.db.staff.update({ where: { id: staff.id }, data: { lastLogin: new Date() } }));
@@ -413,7 +416,7 @@ export class AuthService {
         success: true,
         token,
         refreshToken,
-        user: { _id: staff.id, name: staff.name, email: staff.email, role: 'staff', permissions: staff.permissions, businessId: staff.tenantId, avatar: '' },
+        user: { _id: staff.id, name: staff.name, email: decryptPii(staff.email), role: 'staff', permissions: staff.permissions, businessId: staff.tenantId, avatar: '' },
       };
     }
 

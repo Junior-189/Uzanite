@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { StaffService } from '../../src/modules/staff/staff.service';
 import { runWithRequest } from '../../src/context/tenant-context';
+import { isEncrypted } from '@uzanite/messaging';
+import { blindIndex } from '../../src/security/pii';
 
 const d = hasDb ? describe : describe.skip;
 
@@ -111,5 +113,20 @@ d('staff (Postgres)', () => {
 
     await withTenant(t, () => staff.remove(t, created.staff.id));
     expect(await h.prisma.base.staff.count({ where: { tenantId: t } })).toBe(0);
+  });
+
+  it('encrypts staff email at rest with a blind index and logs in by it', async () => {
+    const t = await seedTenant('st-pii');
+    const created = await withTenant(t, () =>
+      staff.create(t, { name: 'A', email: 'pii@shop.com', password: 'secret123' } as never, randomUUID())
+    );
+    expect(created.staff.email).toBe('pii@shop.com');
+
+    const raw = await h.prisma.base.staff.findUnique({ where: { id: created.staff.id } });
+    expect(isEncrypted(raw!.email)).toBe(true);
+    expect(raw!.emailIdx).toBe(blindIndex('pii@shop.com'));
+
+    const ok = await staff.login({ email: 'pii@shop.com', password: 'secret123' } as never, {});
+    expect(ok.user.email).toBe('pii@shop.com');
   });
 });

@@ -19,6 +19,7 @@ import { BillingService } from '../billing/billing.service';
 import { OutboxService } from '../../outbox/outbox.service';
 import { hashPassword, verifyPasswordDetailed } from '../../security/password';
 import { newId } from '../../ids/id';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 import { runAsSystem } from '../../context/tenant-context';
 
 export interface StaffRequestMeta {
@@ -53,9 +54,9 @@ export class StaffService {
     private readonly outbox: OutboxService
   ) {}
 
-  // Adds the `_id` alias the client keys rows on.
-  private serialize<T extends { id: string }>(row: T) {
-    return { ...row, _id: row.id };
+  // Adds the `_id` alias the client keys rows on, and decrypts the email.
+  private serialize<T extends { id: string; email?: string | null }>(row: T) {
+    return { ...row, _id: row.id, ...(row.email !== undefined ? { email: decryptPii(row.email) } : {}) };
   }
 
   // `login_attempts.user_id` is an FK to `users`; staff ids are not users, so
@@ -77,7 +78,8 @@ export class StaffService {
     }
 
     const staff = await runAsSystem(() =>
-      this.prisma.db.staff.findUnique({ where: { email } })
+      // OR legacy plaintext email supports pre-backfill rows during rollout.
+      this.prisma.db.staff.findFirst({ where: { OR: [{ emailIdx: blindIndex(email) }, { email }] } })
     );
     if (!staff) {
       await this.recordAttempt(email, 'failed', 'Staff not found', meta);
@@ -117,7 +119,7 @@ export class StaffService {
       user: {
         _id: staff.id,
         name: staff.name,
-        email: staff.email,
+        email: decryptPii(staff.email),
         role: 'staff',
         permissions: staff.permissions,
         businessId: staff.tenantId,
@@ -135,7 +137,7 @@ export class StaffService {
       user: {
         _id: staff.id,
         name: staff.name,
-        email: staff.email,
+        email: decryptPii(staff.email),
         role: 'staff',
         permissions: staff.permissions,
         businessId: staff.tenantId,
@@ -197,7 +199,8 @@ export class StaffService {
           id: newId(),
           tenantId,
           name: input.name,
-          email,
+          email: encryptPii(email) ?? '',
+          emailIdx: blindIndex(email),
           passwordHash: await hashPassword(input.password),
           permissions: input.permissions ?? [],
           createdBy,
@@ -228,7 +231,10 @@ export class StaffService {
     if (input.status !== undefined) data.status = input.status;
     if (input.email !== undefined) {
       const email = input.email.toLowerCase();
-      if (email !== staff.email) data.email = email;
+      if (email !== decryptPii(staff.email)) {
+        data.email = encryptPii(email) ?? '';
+        data.emailIdx = blindIndex(email);
+      }
     }
     // Deactivating a staff member must invalidate their outstanding tokens.
     if (input.status === 'inactive') data.tokenVersion = { increment: 1 };
@@ -256,12 +262,12 @@ export class StaffService {
       type: 'email.send',
       tenantId,
       payload: {
-        to: staff.email,
+        to: decryptPii(staff.email),
         subject: 'Your UZANITE staff password was reset',
         html:
           `<h2 style="margin:0 0 12px;color:#16a34a;">Staff Password Reset</h2>` +
           `<p>Hello ${staff.name},</p>` +
-          `<p>Your password for the UZANITE staff account (<strong>${staff.email}</strong>) was reset by your business owner.</p>` +
+          `<p>Your password for the UZANITE staff account (<strong>${decryptPii(staff.email)}</strong>) was reset by your business owner.</p>` +
           `<p>For security, the new password is not included in this email. Please ask your business owner for it, then change it after logging in.</p>`,
       },
     });

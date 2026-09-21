@@ -1015,7 +1015,9 @@ model Staff {
   id           String    @id @default(uuid()) @db.Uuid
   tenantId     String    @map("tenant_id") @db.Uuid
   name         String
-  email        String    @unique
+  email        String
+  // Blind index (HMAC) for equality lookup on the encrypted email.
+  emailIdx     String?   @unique @map("email_idx")
   passwordHash String    @map("password_hash")
   avatar       String    @default("")
   role         String    @default("staff")
