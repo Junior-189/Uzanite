@@ -244,3 +244,26 @@ Duplicated FAQ/carousel components; `PAGE_PERMISSION_MAP` duplicated and diverge
 12. Retire TanStack Query or adopt it; fix impersonation exit; add Netlify CSP; manifest path.
 13. A11y pass (labels, keyboard rows, modal focus, 44px targets) + i18n hardcoded-string lint.
 14. Add SCA/SBOM + destructive-migration gate to CI.
+
+---
+
+## Remediation log (2026-09-21)
+
+**Fixed (commits on `feat/platform-strangler-migration`):**
+
+- **Critical:** C1 MFA-token bypass; C2 cross-tenant offline cache; C3 cash-order double-credit; C4 plan-limit bypass (service choke point + CSV cap). Plus the runtime-found period-enum 400 and product `clientRef`/image 400.
+- **High security:** FORCE RLS on all tenant tables + boot assertion; Google `email_verified`/issuer; TOTP enrol step-up (password); impersonation read-only; PermissionsGuard owner-only; rate limiter fails closed for auth/admin/webhook/payments; JWT `notAfter`; third-party QR removed; RBAC on core reads; expenses/debts `clientRef` idempotency.
+- **High reliability/perf:** durable inbound (claim release + idempotent message insert via unique `(tenant_id, provider_message_id)`); worker outbound lease reclaim; lazy provider config; dashboard SQL aggregates + report/broadcast/staff caps; batched order item lookup; atomic order plan-limit; backup refuses unencrypted dumps.
+- **Medium/Low (selected):** constant-time verify-token; metrics token header-only; CSV formula-injection; atomic refresh rotation; env requires `STORAGE_SIGNING_SECRET`; `(tenant_id,id)` keyset indexes + finance CHECK constraints; feature-flag global cache generation; optional message-body redaction; frontend (impersonation exit, offline false-success, purchases routed writes, Netlify CSP, Modal focus trap, keyboard rows, labels, safe-area, TanStack removal, barcode throttle, Reports invalid-date/XHR).
+- Regenerated `openapi.json`.
+
+**Still open (lower risk / larger refactors — tracked, not fixed in this pass):**
+
+- Conversation optimistic concurrency (`persistState` lost-update / first-message P2002).
+- Refund does not restore stock / cash orders unrefundable.
+- Provider mismatch marks paid payments `failed` without operator notification.
+- Duplicate payment/impersonation/WhatsApp endpoints; admin privacy stub route.
+- Worker: per-replica retention/reconciliation (no leader election); multiple Prisma pools; outbox DLQ has no replay tooling.
+- PII at rest (column encryption) and `ENCRYPTION_KEY` rotation envelope.
+- Frontend: hardcoded EN strings + duplicated components (`FAQAccordion`/`TestimonialCarousel`/`ClickableRow`); PWA PNG icons + external font/FA SRI; list pagination on contacts/expenses/debts/purchases/staff; native `confirm/prompt` dialogs; remaining touch-target sizes.
+- `OrdersService`/`PaymentsService` god-object extraction readiness.
