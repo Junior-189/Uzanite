@@ -12,9 +12,17 @@ export interface ReportColumn {
 
 export interface Dataset {
   title: string;
+  subtitle?: string;
   stats: Array<{ label: string; value: string }>;
+  chartTitle?: string;
+  series?: Array<{ label: string; value: number }>;
   columns: ReportColumn[];
   rows: Array<Record<string, string | number>>;
+}
+
+export interface ReportSeriesPoint {
+  label: string;
+  value: number;
 }
 
 const fmtNum = (n: number) => Number(n ?? 0).toLocaleString('en-US');
@@ -31,6 +39,28 @@ export class ReportsService {
   async businessName(tenantId: string): Promise<string> {
     const tenant = await this.prisma.db.tenant.findFirst({ where: { id: tenantId }, select: { name: true } });
     return tenant?.name ?? 'Business';
+  }
+
+  /** Daily totals over the most recent `days` days with data. */
+  private dailySeries<T>(rows: T[], getDate: (r: T) => Date, getValue: (r: T) => number, days = 14): ReportSeriesPoint[] {
+    const byDay = new Map<string, number>();
+    for (const r of rows) {
+      const key = new Date(getDate(r)).toISOString().slice(0, 10);
+      byDay.set(key, (byDay.get(key) ?? 0) + getValue(r));
+    }
+    return [...byDay.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-days)
+      .map(([d, value]) => ({ label: d.slice(5).replace('-', '/'), value }));
+  }
+
+  private countBy<T>(rows: T[], key: (r: T) => string): ReportSeriesPoint[] {
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      const k = key(r) || '—';
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+    return [...map.entries()].map(([label, value]) => ({ label, value }));
   }
 
   async summary(tenantId: string, query: ReportQuery) {
@@ -90,6 +120,9 @@ export class ReportsService {
     const total = rows.reduce((s, e) => s + this.money(e.amount), 0);
     return {
       title: 'Expenses Report',
+      subtitle: 'Expense breakdown',
+      chartTitle: 'Daily Spend',
+      series: this.dailySeries(rows, (r) => r.date, (r) => this.money(r.amount)),
       stats: [
         { label: 'Total', value: fmtNum(total) },
         { label: 'Records', value: String(rows.length) },
@@ -121,6 +154,9 @@ export class ReportsService {
     const total = rows.reduce((s, p) => s + this.money(p.totalCost), 0);
     return {
       title: 'Purchases Report',
+      subtitle: 'Purchase & supplier summary',
+      chartTitle: 'Daily Purchases',
+      series: this.dailySeries(rows, (r) => r.date, (r) => this.money(r.totalCost)),
       stats: [
         { label: 'Total Cost', value: fmtNum(total) },
         { label: 'Records', value: String(rows.length) },
@@ -152,8 +188,15 @@ export class ReportsService {
     });
     const total = rows.reduce((s, d) => s + this.money(d.amount), 0);
     const remaining = rows.reduce((s, d) => s + Math.max(0, this.money(d.amount) - this.money(d.paidAmount)), 0);
+    const byStatus = ['unpaid', 'partial', 'paid'].map((status) => ({
+      label: status,
+      value: rows.filter((d) => d.status === status).reduce((sum, d) => sum + Math.max(0, this.money(d.amount) - this.money(d.paidAmount)), 0),
+    }));
     return {
       title: 'Debts Report',
+      subtitle: 'Outstanding debts & recovery',
+      chartTitle: 'Outstanding by Status',
+      series: byStatus,
       stats: [
         { label: 'Total Amount', value: fmtNum(total) },
         { label: 'Remaining', value: fmtNum(remaining) },
@@ -189,6 +232,9 @@ export class ReportsService {
       .reduce((s, o) => s + this.money(o.total), 0);
     return {
       title: 'Orders Report',
+      subtitle: 'Orders & revenue performance',
+      chartTitle: 'Orders by Status',
+      series: this.countBy(rows, (o) => o.status),
       stats: [
         { label: 'Orders', value: String(rows.length) },
         { label: 'Revenue', value: fmtNum(revenue) },
@@ -219,8 +265,15 @@ export class ReportsService {
       orderBy: { name: 'asc' },
     });
     const value = rows.reduce((s, p) => s + this.money(p.price) * (p.stock ?? 0), 0);
+    const topValue = rows
+      .map((p) => ({ label: p.name, value: this.money(p.price) * (p.stock ?? 0) }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
     return {
       title: 'Products Report',
+      subtitle: 'Inventory summary',
+      chartTitle: 'Inventory Value (top)',
+      series: topValue,
       stats: [
         { label: 'Products', value: String(rows.length) },
         { label: 'Inventory Value', value: fmtNum(value) },
@@ -250,6 +303,9 @@ export class ReportsService {
     });
     return {
       title: 'Staff Report',
+      subtitle: 'Staff & activity summary',
+      chartTitle: 'Staff by Status',
+      series: this.countBy(rows, (s) => s.status),
       stats: [{ label: 'Members', value: String(rows.length) }],
       columns: [
         { key: 'name', label: 'Name', width: 2 },

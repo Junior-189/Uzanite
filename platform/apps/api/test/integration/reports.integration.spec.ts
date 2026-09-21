@@ -62,6 +62,10 @@ d('reports (Postgres)', () => {
       'Staff Report',
     ]);
 
+    const expenses = datasets.find((d) => d.title === 'Expenses Report')!;
+    expect(expenses.chartTitle).toBe('Daily Spend');
+    expect((expenses.series ?? []).length).toBeGreaterThan(0);
+
     const csv = reports.toCsv(datasets);
     expect(csv).toContain('Expenses Report');
     expect(csv).toContain('Customer');
