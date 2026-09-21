@@ -31,16 +31,19 @@ export class ProductsController {
     return principal.name || principal.userId;
   }
 
+  @RequirePermission('products')
   @Get()
   list(@TenantId() tenantId: string, @Query(new ZodValidationPipe(listProductsQuery)) query: unknown) {
     return this.products.list(tenantId, query as never);
   }
 
+  @RequirePermission('products')
   @Get('barcode/:code')
   byBarcode(@TenantId() tenantId: string, @Param('code') code: string) {
     return this.products.getByBarcode(tenantId, code);
   }
 
+  @RequirePermission('products')
   @Get(':id/movements')
   movements(
     @TenantId() tenantId: string,
@@ -51,6 +54,7 @@ export class ProductsController {
     return this.products.movements(tenantId, params.id, limit ? Number(limit) : 50, cursor);
   }
 
+  @RequirePermission('products')
   @Get(':id')
   get(@TenantId() tenantId: string, @Param(new ZodValidationPipe(productIdParam)) params: { id: string }) {
     return this.products.get(tenantId, params.id);

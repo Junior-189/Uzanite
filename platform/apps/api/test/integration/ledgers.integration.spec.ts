@@ -114,4 +114,15 @@ d('finance ledgers (Postgres)', () => {
     await withTenant(t, () => debts.remove(t, created.debt._id, randomUUID()));
     expect((await withTenant(t, () => debts.list(t, { status: 'all', limit: 100 } as never))).count).toBe(2);
   });
+
+  it('is idempotent on clientRef for expenses and debts', async () => {
+    const t = await seedTenant('ledger-idem');
+    const e1 = await withTenant(t, () => expenses.create(t, { description: 'Fuel', amount: 1000, clientRef: 'e-1' } as never, owner()));
+    const e2 = await withTenant(t, () => expenses.create(t, { description: 'Fuel', amount: 1000, clientRef: 'e-1' } as never, owner()));
+    expect(e2.expense._id).toBe(e1.expense._id);
+
+    const d1 = await withTenant(t, () => debts.create(t, { customerName: 'A', amount: 500, clientRef: 'd-1' } as never, owner()));
+    const d2 = await withTenant(t, () => debts.create(t, { customerName: 'A', amount: 500, clientRef: 'd-1' } as never, owner()));
+    expect(d2.debt._id).toBe(d1.debt._id);
+  });
 });

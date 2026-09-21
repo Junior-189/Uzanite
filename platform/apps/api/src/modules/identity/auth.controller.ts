@@ -12,6 +12,7 @@ import {
   registerSchema,
   resetPasswordSchema,
   themeSchema,
+  totpEnrollSchema,
   totpCodeSchema,
   totpDisableSchema,
 } from '@uzanite/contracts';
@@ -116,8 +117,8 @@ export class AuthController {
   // ── TOTP two-factor management (authenticated) ───────────────────────────────
   @HttpCode(200)
   @Post('totp/enroll')
-  totpEnroll(@CurrentUser() principal: Principal) {
-    return this.auth.beginTotp(principal.userId);
+  totpEnroll(@CurrentUser() principal: Principal, @Body(new ZodValidationPipe(totpEnrollSchema)) body: { password: string }) {
+    return this.auth.beginTotp(principal.userId, body.password);
   }
 
   @HttpCode(200)

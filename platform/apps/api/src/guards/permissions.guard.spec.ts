@@ -37,9 +37,13 @@ describe('PermissionsGuard (read/write authorization baseline)', () => {
     expect(run(principal({ permissions: ['orders', 'products'] }), () => makeGuard(['orders', 'products']).canActivate(context))).toBe(true);
   });
 
-  it('lets owners and managers bypass permission checks', () => {
+  it('lets owners bypass permission checks but not managers without the permission', () => {
     expect(run(principal({ role: 'owner', permissions: [] }), () => makeGuard(['payments']).canActivate(context))).toBe(true);
-    expect(run(principal({ role: 'manager', permissions: [] }), () => makeGuard(['payments']).canActivate(context))).toBe(true);
+    // Managers are ordinary permission-holders now (owner-only perms stay owner-only).
+    expect(() =>
+      run(principal({ role: 'manager', permissions: [] }), () => makeGuard(['manage_staff']).canActivate(context))
+    ).toThrow(/Missing permission/);
+    expect(run(principal({ role: 'manager', permissions: ['manage_staff'] }), () => makeGuard(['manage_staff']).canActivate(context))).toBe(true);
   });
 
   it('lets platform admins bypass', () => {

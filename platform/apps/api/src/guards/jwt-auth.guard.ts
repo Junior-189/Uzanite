@@ -146,6 +146,16 @@ export class JwtAuthGuard implements CanActivate {
       tokenVersion: user.tokenVersion,
       impersonatedBy: payload.act ?? null,
     };
+    // Impersonation is a read-only support view: an admin acting as a tenant
+    // may look, but must not mutate money/stock/records. Session management
+    // (refresh/logout) is exempt.
+    if (principal.impersonatedBy && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      const url = req.originalUrl ?? req.url ?? '';
+      if (!url.includes('/auth/refresh') && !url.includes('/auth/logout')) {
+        throw new ForbiddenException('Impersonation sessions are read-only');
+      }
+    }
+
     setPrincipal(principal);
     setTenant(principal.tenantId);
     (req as Request & { principal?: Principal }).principal = principal;

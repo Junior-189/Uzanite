@@ -2,6 +2,7 @@ import { Controller, Delete, Get, Param, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { listNotificationsQuery, notificationIdParam } from '@uzanite/contracts';
 import { RequireTenant } from '../../decorators/require-tenant.decorator';
+import { RequirePermission } from '../../decorators/permissions.decorator';
 import { RequirePlanFeature } from '../../decorators/plan.decorator';
 import { RateLimit } from '../../decorators/rate-limit.decorator';
 import { CurrentUser, TenantId } from '../../decorators/principal.decorator';
@@ -13,6 +14,7 @@ import { NotificationsService } from './notifications.service';
 @ApiBearerAuth()
 @RequireTenant()
 @RequirePlanFeature('notifications')
+@RequirePermission('notifications')
 @RateLimit({ limit: 240, windowSeconds: 60, keyPrefix: 'notifications', scope: 'tenant' })
 @Controller('notifications')
 export class NotificationsController {

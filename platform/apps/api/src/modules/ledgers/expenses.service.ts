@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ExpenseCreateInput, ListExpensesQuery } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginate } from '../../pagination/pagination';
@@ -31,18 +32,32 @@ export class ExpensesService {
   }
 
   async create(tenantId: string, input: ExpenseCreateInput, principal: Principal) {
-    const expense = await this.prisma.db.expense.create({
-      data: {
-        id: newId(),
-        tenantId,
-        description: input.description,
-        amount: String(input.amount),
-        category: input.category ?? 'Other',
-        recordedBy: actorOf(principal),
-        ...(input.date ? { date: input.date } : {}),
-      },
-    });
-    return { success: true, expense: this.serialize(expense) };
+    const clientRef = input.clientRef?.trim() ? input.clientRef.trim() : null;
+    if (clientRef) {
+      const existing = await this.prisma.db.expense.findFirst({ where: { tenantId, clientRef } });
+      if (existing) return { success: true, expense: this.serialize(existing) };
+    }
+    try {
+      const expense = await this.prisma.db.expense.create({
+        data: {
+          id: newId(),
+          tenantId,
+          description: input.description,
+          amount: String(input.amount),
+          category: input.category ?? 'Other',
+          recordedBy: actorOf(principal),
+          clientRef,
+          ...(input.date ? { date: input.date } : {}),
+        },
+      });
+      return { success: true, expense: this.serialize(expense) };
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && clientRef) {
+        const existing = await this.prisma.db.expense.findFirst({ where: { tenantId, clientRef } });
+        if (existing) return { success: true, expense: this.serialize(existing) };
+      }
+      throw err;
+    }
   }
 
   async remove(tenantId: string, id: string) {

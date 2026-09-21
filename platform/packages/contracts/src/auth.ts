@@ -57,3 +57,6 @@ export type ThemeInput = z.infer<typeof themeSchema>;
 // Google sign-in: the SPA posts the Google Identity Services ID token.
 export const googleLoginSchema = z.object({ idToken: z.string().min(1).max(4096) }).strict();
 export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
+
+// Enrolling TOTP is a privilege escalation vector; require the password (step-up).
+export const totpEnrollSchema = z.object({ password: z.string().min(1).max(200) }).strict();

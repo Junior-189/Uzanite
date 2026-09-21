@@ -3,7 +3,10 @@ import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { getRequestStore } from '../context/tenant-context';
 
-const PRIVILEGED_ROLES = new Set(['owner', 'manager']);
+// Only the owner bypasses permission metadata. Managers must hold the
+// explicit permission (their role defaults grant the operational set, but not
+// owner-only permissions such as `manage_staff`).
+const PRIVILEGED_ROLES = new Set(['owner']);
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {

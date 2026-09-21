@@ -6,6 +6,8 @@ import { JWT_ALGORITHM, JWT_AUDIENCE, JWT_ISSUER } from './jwt.constants';
 interface JwtKey {
   kid: string;
   secret: string;
+  /** Optional ISO timestamp; once past, the key no longer verifies tokens. */
+  notAfter?: string;
 }
 
 interface JwtHeader {
@@ -49,7 +51,13 @@ export class JwtKeyService {
         this.logger.warn('JWT_KEYS is not valid JSON — falling back to JWT_SECRET');
       }
     }
-    if (parsed.length === 0) parsed = [{ kid: 'default', secret }];
+    // Drop retired keys so tokens signed with them no longer verify.
+    const now = Date.now();
+    const live = parsed.filter((k) => !k.notAfter || new Date(k.notAfter).getTime() > now);
+    if (live.length !== parsed.length) {
+      this.logger.log(`Retired ${parsed.length - live.length} JWT key(s) past notAfter`);
+    }
+    parsed = live.length > 0 ? live : [{ kid: 'default', secret }];
     for (const key of parsed) this.keys.set(key.kid, key.secret);
 
     const requested = config.get<string>('JWT_ACTIVE_KID') ?? '';

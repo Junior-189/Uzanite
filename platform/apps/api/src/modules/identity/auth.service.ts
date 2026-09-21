@@ -210,7 +210,13 @@ export class AuthService {
   }
 
   // ── TOTP two-factor management ───────────────────────────────────────────────
-  beginTotp(userId: string) {
+  // Step-up: enrolling an authenticator requires the account password, so a
+  // stolen session alone cannot bind a new second factor.
+  async beginTotp(userId: string, password: string) {
+    const user = await this.prisma.db.user.findFirst({ where: { id: userId, deletedAt: null } });
+    if (!user) throw new UnauthorizedException('User not found');
+    const verification = await verifyPasswordDetailed(password, user.passwordHash);
+    if (!verification.valid) throw new UnauthorizedException('Password is incorrect');
     return this.totp.beginEnrollment(userId);
   }
 
@@ -366,7 +372,7 @@ export class AuthService {
       throw new HttpException({ success: false, error: 'Google login is not configured on the server' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    let payload: { sub?: string; email?: string; name?: string; picture?: string; aud?: string; exp?: number };
+    let payload: { sub?: string; email?: string; name?: string; picture?: string; aud?: string; exp?: number; iss?: string; email_verified?: boolean | string };
     try {
       const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
       payload = (await res.json()) as typeof payload;
@@ -375,7 +381,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid Google token');
     }
     if (payload.aud !== clientId) throw new UnauthorizedException('Token audience mismatch');
+    if (payload.iss !== 'accounts.google.com' && payload.iss !== 'https://accounts.google.com') {
+      throw new UnauthorizedException('Invalid Google token issuer');
+    }
     if (!payload.exp || payload.exp * 1000 < Date.now()) throw new UnauthorizedException('Google token expired');
+    // Never trust an unverified email: it is the account-linking key.
+    if (payload.email_verified !== true && payload.email_verified !== 'true') {
+      throw new UnauthorizedException('Google account email is not verified');
+    }
 
     const email = (payload.email || '').toLowerCase();
     if (!email) throw new BadRequestException('Google account has no email');

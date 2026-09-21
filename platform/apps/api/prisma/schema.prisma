@@ -1162,12 +1162,14 @@ model Expense {
   amount      Decimal  @db.Decimal(14, 2)
   category    String   @default("Other")
   recordedBy  String   @default("Owner") @map("recorded_by")
+  clientRef   String?  @map("client_ref")
   date        DateTime @default(now())
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, clientRef])
   @@index([tenantId, date])
   @@index([tenantId, id])
   @@map("expenses")
@@ -1215,6 +1217,7 @@ model Debt {
   orderId       String?   @map("order_id") @db.Uuid
   notes         String    @default("")
   recordedBy    String    @default("Owner") @map("recorded_by")
+  clientRef     String?   @map("client_ref")
   deletedAt     DateTime? @map("deleted_at")
   deletedBy     String?   @map("deleted_by") @db.Uuid
   createdAt     DateTime  @default(now()) @map("created_at")
@@ -1222,6 +1225,7 @@ model Debt {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, clientRef])
   @@index([tenantId, status])
   @@index([tenantId, deletedAt])
   @@index([tenantId, createdAt])

@@ -41,7 +41,7 @@ d('google login (Postgres)', () => {
     await h.prisma.base.staff.create({
       data: { id: randomUUID(), tenantId, name: 'Sam', email: 'sam@shop.com', passwordHash: 'x', permissions: ['orders'] },
     });
-    mockTokeninfo({ sub: 'g-sub-1', email: 'SAM@shop.com', name: 'Sam', aud: CLIENT_ID, exp: future(), picture: 'http://img' });
+    mockTokeninfo({ sub: 'g-sub-1', email: 'SAM@shop.com', name: 'Sam', aud: CLIENT_ID, exp: future(), iss: 'https://accounts.google.com', email_verified: true, picture: 'http://img' });
 
     const res = await h.auth.googleLogin('token', { ip: '127.0.0.1' });
     expect(res.success).toBe(true);
@@ -51,7 +51,7 @@ d('google login (Postgres)', () => {
   });
 
   it('creates a pending tenant on first sign-up, then reuses it', async () => {
-    mockTokeninfo({ sub: 'g-sub-2', email: 'New@Shop.com', name: 'New Owner', aud: CLIENT_ID, exp: future() });
+    mockTokeninfo({ sub: 'g-sub-2', email: 'New@Shop.com', name: 'New Owner', aud: CLIENT_ID, exp: future(), iss: 'https://accounts.google.com', email_verified: true });
 
     const first = await h.auth.googleLogin('token', {});
     expect(first.pending).toBe(true);
@@ -65,11 +65,16 @@ d('google login (Postgres)', () => {
     expect(await h.prisma.base.tenant.count()).toBe(1);
   });
 
+  it('rejects a token whose email is not verified', async () => {
+    mockTokeninfo({ sub: 'g-sub-x', email: 'x@shop.com', aud: CLIENT_ID, exp: future(), iss: 'https://accounts.google.com', email_verified: false });
+    await expect(h.auth.googleLogin('token', {})).rejects.toThrow(/not verified/i);
+  });
+
   it('rejects a token with the wrong audience and expired tokens', async () => {
-    mockTokeninfo({ sub: 'g-sub-3', email: 'x@shop.com', aud: 'someone-else', exp: future() });
+    mockTokeninfo({ sub: 'g-sub-3', email: 'x@shop.com', aud: 'someone-else', exp: future(), iss: 'https://accounts.google.com', email_verified: true });
     await expect(h.auth.googleLogin('token', {})).rejects.toThrow(/audience/i);
 
-    mockTokeninfo({ sub: 'g-sub-4', email: 'x@shop.com', aud: CLIENT_ID, exp: Math.floor(Date.now() / 1000) - 10 });
+    mockTokeninfo({ sub: 'g-sub-4', email: 'x@shop.com', aud: CLIENT_ID, exp: Math.floor(Date.now() / 1000) - 10, iss: 'https://accounts.google.com', email_verified: true });
     await expect(h.auth.googleLogin('token', {})).rejects.toThrow(/expired/i);
   });
 });

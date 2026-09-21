@@ -11,6 +11,8 @@ interface RlsRoleCheck {
   owns_tenants: bigint | number;
   tenants_rls_enabled: boolean | null;
   tenants_rls_forced: boolean | null;
+  /** Any table with RLS enabled but not FORCEd (a silent isolation gap). */
+  rls_enabled_not_forced: bigint | number;
 }
 
 @Injectable()
@@ -179,7 +181,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
              JOIN pg_roles o ON o.oid = c.relowner
             WHERE c.relname = 'tenants' AND o.rolname = current_user) AS owns_tenants,
           (SELECT relrowsecurity FROM pg_class WHERE relname = 'tenants' LIMIT 1) AS tenants_rls_enabled,
-          (SELECT relforcerowsecurity FROM pg_class WHERE relname = 'tenants' LIMIT 1) AS tenants_rls_forced
+          (SELECT relforcerowsecurity FROM pg_class WHERE relname = 'tenants' LIMIT 1) AS tenants_rls_forced,
+          (SELECT count(*)::int FROM pg_class c
+            WHERE c.relrowsecurity AND NOT c.relforcerowsecurity AND c.relkind = 'r') AS rls_enabled_not_forced
         FROM pg_roles r
         WHERE r.rolname = current_user
       `;
@@ -191,10 +195,12 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     if (!row) return;
 
     const ownsTenants = Number(row.owns_tenants) > 0;
-    const unsafe = row.is_superuser || row.bypass_rls || ownsTenants;
+    const notForced = Number(row.rls_enabled_not_forced) > 0;
+    const unsafe = row.is_superuser || row.bypass_rls || ownsTenants || notForced;
     const summary =
       `db role="${row.role}" superuser=${row.is_superuser} bypassrls=${row.bypass_rls} owns_tenants=${ownsTenants}` +
-      ` rls_enabled=${row.tenants_rls_enabled} rls_forced=${row.tenants_rls_forced}`;
+      ` rls_enabled=${row.tenants_rls_enabled} rls_forced=${row.tenants_rls_forced}` +
+      ` tables_rls_without_force=${row.rls_enabled_not_forced}`;
 
     if (!unsafe) {
       this.logger.log(`RLS safety check passed (${summary})`);
@@ -203,8 +209,8 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
 
     const message =
       `RLS is not enforceable with the connected database role. ${summary}. ` +
-      'Connect as a non-owner role with NOBYPASSRLS (e.g. uzanite_app) and ensure ' +
-      'migration 0012 (FORCE ROW LEVEL SECURITY) has been applied.';
+      'Connect as a non-owner role with NOBYPASSRLS (e.g. uzanite_app), and ensure every ' +
+      'table with RLS enabled also has FORCE ROW LEVEL SECURITY (migrations 0012+).';
 
     if (isProduction) throw new Error(message);
     if (rlsRequired) this.logger.warn(message);

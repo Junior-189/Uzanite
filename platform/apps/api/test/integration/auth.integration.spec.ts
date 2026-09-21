@@ -68,7 +68,7 @@ d('auth integration (Postgres)', () => {
     const first = await h.auth.login({ email: 'd@example.com', password: 'Str0ng!Passw0rd' } as never, {});
     const userId = (first as { user: { id: string } }).user.id;
 
-    const { secret } = await h.auth.beginTotp(userId);
+    const { secret } = await h.auth.beginTotp(userId, 'Str0ng!Passw0rd');
     const { recoveryCodes } = await h.auth.confirmTotp(userId, await generate({ secret }));
     expect(recoveryCodes).toHaveLength(8);
 

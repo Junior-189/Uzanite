@@ -36,11 +36,13 @@ export class OrdersController {
     return principal.name || principal.userId;
   }
 
+  @RequirePermission('orders')
   @Get()
   list(@TenantId() tenantId: string, @Query(new ZodValidationPipe(listOrdersQuery)) query: unknown) {
     return this.orders.list(tenantId, query as never);
   }
 
+  @RequirePermission('orders')
   @Get('by-number/:orderNumber')
   byNumber(
     @TenantId() tenantId: string,
@@ -49,11 +51,13 @@ export class OrdersController {
     return this.orders.getByNumber(tenantId, params.orderNumber);
   }
 
+  @RequirePermission('orders')
   @Get(':id/history')
   history(@TenantId() tenantId: string, @Param(new ZodValidationPipe(orderIdParam)) params: { id: string }) {
     return this.orders.history(tenantId, params.id);
   }
 
+  @RequirePermission('orders')
   @Get(':id')
   get(@TenantId() tenantId: string, @Param(new ZodValidationPipe(orderIdParam)) params: { id: string }) {
     return this.orders.get(tenantId, params.id);

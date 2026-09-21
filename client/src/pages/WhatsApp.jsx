@@ -196,7 +196,11 @@ function ChatTab({ t }) {
         <div className="text-center">
           {qr ? (
             <div className="inline-block p-4 bg-white rounded-2xl shadow-lg border border-gray-100">
-              <img src={qrImage || `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(qr)}`} alt="QR Code" className="w-full max-w-[280px] h-auto aspect-square rounded-lg" />
+              {qrImage ? (
+                <img src={qrImage} alt="QR Code" className="w-full max-w-[280px] h-auto aspect-square rounded-lg" />
+              ) : (
+                <div className="text-xs text-gray-500 max-w-[280px]">QR pairing is unavailable. Configure Meta Cloud API credentials instead.</div>
+              )}
               <div className="mt-3 text-xs text-gray-400"><i className="fas fa-clock mr-1"></i>{t('whatsapp.qr_refresh')}</div>
             </div>
           ) : (

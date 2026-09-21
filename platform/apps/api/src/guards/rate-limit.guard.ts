@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
@@ -6,6 +6,10 @@ import { RATE_LIMIT_KEY, RateLimitOptions, RateLimitScope } from '../decorators/
 import { getRequestStore } from '../context/tenant-context';
 import { MetricsService } from '../metrics/metrics.service';
 import { RedisService } from '../redis/redis.service';
+
+// Prefixes whose throttling must not silently disappear (auth, staff, admin, webhooks).
+const SENSITIVE_PREFIXES = ['auth', 'staff', 'admin', 'webhook', 'payments'];
+
 
 /**
  * Redis-backed sliding-window rate limiter, shared across API replicas.
@@ -81,11 +85,14 @@ export class RateLimitGuard implements CanActivate {
       try {
         hit = await this.redis.slidingWindowHit(key, bucket.windowSeconds, bucket.limit, member);
       } catch (err) {
-        // Fail OPEN on limiter infrastructure failure: a Redis blip must not
-        // take the whole API down. Readiness already reports Redis health, and
-        // the counter below makes the degradation visible.
         this.logger.error(`Rate limiter unavailable for ${key}: ${(err as Error).message}`);
         this.metrics.observeRateLimit(options.keyPrefix, 'error');
+        // Sensitive surfaces FAIL CLOSED: without throttling, auth stays open to
+        // brute force and (together with lockout) has no backstop. Ordinary
+        // routes fail open so a Redis blip does not take the whole API down.
+        if (SENSITIVE_PREFIXES.some((prefix) => options.keyPrefix.startsWith(prefix))) {
+          throw new ServiceUnavailableException('Rate limiting is unavailable; try again shortly.');
+        }
         return true;
       }
 

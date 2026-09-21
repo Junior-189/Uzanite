@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { DebtCreateInput, DebtPayInput, DebtUpdateInput, ListDebtsQuery } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OutboxService } from '../../outbox/outbox.service';
@@ -48,21 +49,35 @@ export class DebtsService {
   }
 
   async create(tenantId: string, input: DebtCreateInput, principal: Principal) {
-    const debt = await this.prisma.db.debt.create({
-      data: {
-        id: newId(),
-        tenantId,
-        customerName: input.customerName,
-        customerPhone: input.customerPhone ?? '',
-        amount: String(round2(input.amount)),
-        description: input.description ?? '',
-        dueDate: input.dueDate ?? null,
-        orderId: input.orderId ? input.orderId : null,
-        notes: input.notes ?? '',
-        recordedBy: actorOf(principal),
-      },
-    });
-    return { success: true, debt: this.serialize(debt) };
+    const clientRef = input.clientRef?.trim() ? input.clientRef.trim() : null;
+    if (clientRef) {
+      const existing = await this.prisma.db.debt.findFirst({ where: { tenantId, clientRef } });
+      if (existing) return { success: true, debt: this.serialize(existing) };
+    }
+    try {
+      const debt = await this.prisma.db.debt.create({
+        data: {
+          id: newId(),
+          tenantId,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone ?? '',
+          amount: String(round2(input.amount)),
+          description: input.description ?? '',
+          dueDate: input.dueDate ?? null,
+          orderId: input.orderId ? input.orderId : null,
+          notes: input.notes ?? '',
+          recordedBy: actorOf(principal),
+          clientRef,
+        },
+      });
+      return { success: true, debt: this.serialize(debt) };
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && clientRef) {
+        const existing = await this.prisma.db.debt.findFirst({ where: { tenantId, clientRef } });
+        if (existing) return { success: true, debt: this.serialize(existing) };
+      }
+      throw err;
+    }
   }
 
   private async getOrThrow(tenantId: string, id: string) {
