@@ -122,8 +122,8 @@ requests are still hitting `/api/v1/<domain>` in the proxy logs.
   either authenticates against both. Enabling `auth` moves login/refresh/me,
   Google sign-in, theme, and staff login to the platform; only `/auth/staff`
   (the legacy alternate staff login) stays legacy.
-- **products** — `/products/bulk` (CSV import) is legacy-only and remains so even
-  when `products` is enabled.
+- **products** — `/products/bulk` (CSV import) is now served by the platform
+  (multipart CSV with the legacy column aliases).
 - **admin** — the admin-panel **users** surface routes to the platform, but the
   admin **feature-flags** and **activity-logs/login-attempts** pages remain
   legacy (see `CUTOVER_COVERAGE.md`). Platform admin endpoints require TOTP MFA

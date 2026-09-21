@@ -24,7 +24,7 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | File uploads | — | `POST /api/v1/files` (+ signed `GET /files/:key`) | **READY** | platform module built (`files`); client upload call sites wired during products/payments cutover |
 | Orders (list/get/status actions) | `/api/orders`, `/orders/:id/*` | `/api/v1/orders`, `/orders/:id/*` | **READY** | routed; `_id` alias; legacy POS extras accepted (cash → PAID/DELIVERED via manual path); receipts now platform-served |
 | Payments (initiate/manual) | `/api/payments/orders/:id/{initiate,manual}` | `/api/v1/payments/orders/:id/{initiate,manual}` | **PARTIAL** | platform now accepts `proofPath` (upload via `/api/v1/files`); client must upload first and send the key |
-| Products (CRUD/restock) | `/api/products`, `/products/:id/restock` | `/api/v1/products`, `/products/:id/restock` | **READY** | routed (`/products`); responses alias `_id` + signed `imagePath`; client uploads image via `/api/v1/files`; legacy `/products/bulk` (CSV import) stays legacy-only |
+| Products (CRUD/restock/import) | `/api/products`, `/products/:id/restock`, `/products/bulk` | `/api/v1/products`, `/products/:id/restock`, `/products/bulk` | **READY** | routed (`/products`); responses alias `_id` + signed `imagePath`; image + CSV bulk import handled by the platform |
 | Categories | (via products) | `/api/v1/categories` | **READY** | client does not call it directly |
 | Receipts | `/api/orders/:id/receipt`, `/orders/:id/send-receipt` | same `/api/v1/orders/:id/receipt` (PDF) + `send-receipt` | **READY** | platform renders the receipt PDF (pdfkit + QR) at the legacy path; `send-receipt` queues `receipt.send` |
 | Expenses | `/api/expenses*` | `/api/v1/expenses*` | **READY** | routed; platform module built + tested (list/totals, create, hard delete). Legacy shape: `_id`, numeric `total` |
@@ -38,6 +38,8 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 | Admin (users) | `/api/admin/users*`, `/api/admin/sub-admins*`, `/api/admin/stats`, `/api/admin/impersonate/:id` | `/api/v1/admin/users*` etc. | **READY** | routed sub-paths; platform module built + tested (list/stats, approve/reject/suspend, update name/email, reset-password, delete, impersonate, sub-admin CRUD). Legacy shapes adapted (`_id`, `businessName`, counts) |
 | Admin (feature-flags) | `/api/admin/feature-flags*` | `/api/v1/admin/feature-flags*` (legacy keyed shape) | **READY** | routed; global + per-tenant overrides, `{features,global}`/`{flags}` shapes, `/me` for tenants |
 | Admin (activity-logs/login-attempts) | `/api/admin/{activity-logs,login-attempts}*` | `/api/v1/admin/...` (same) | **READY** | routed; list (page/page + filters) + summary for both, joined to user name/email |
+| Admin (queues) | `/api/admin/queues`, `/api/admin/queues/dead-letters` | `/api/v1/admin/queues` (same) | **READY** | platform exposes queue job counts + dead letters |
+| Admin (privacy) | `/api/admin/privacy/tenants/:id/{export,erase}` | `/api/v1/admin/privacy/tenants/:id/export` | **PARTIAL** | export ported; tenant-wide erasure intentionally not supported (subject-scoped `/privacy/erase` instead) |
 | Recycle bin | `/api/recycle-bin`, `/restore/:type/:id`, `/:type/:id` | `/api/v1/recycle-bin` (same sub-paths, types: orders/products/contacts/notifications) | **READY** | routed; platform module covers all four client tabs |
 | Broadcast / email | `/api/broadcast/*` | `/api/v1/broadcast/*` (same) | **READY** | routed; send (whatsapp/email/both) fans out to opted-in contacts via the messaging outbox, contacts list/count/add/import, `/sent` log; gated by `broadcast` feature + `broadcastsPerMonth` |
 | Privacy | `/api/privacy/{export,erase}` | `/api/v1/privacy/{requests,consent,erase}` | **BLOCKED** | export path/shape differ |
@@ -67,6 +69,6 @@ Cutover flag: `VITE_API_V1` (default **off**). See `client/src/utils/apiRouting.
 
 1. ✅ Platform: file uploads.
 2. ✅ Platform: dashboard.
-3. **All client-facing domains are migrated.** The remaining work is the final legacy removal (Baileys transport, MongoDB models, Express routes) once the platform runs production traffic for a soak period.
+3. **All client-facing domains + admin/ops surface are migrated.** The remaining work is the final legacy removal (Baileys transport, MongoDB models, Express routes) once the platform runs production traffic for a soak period — see `docs/LEGACY_REMOVAL_PLAN.md`.
 4. Cut over each domain (flag) with parity green + reconciliation.
 5. Then delete **Baileys**, then **Mongo/Express** (Batch D completion).

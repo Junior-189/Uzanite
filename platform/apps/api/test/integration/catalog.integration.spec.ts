@@ -65,6 +65,24 @@ d('catalog integration (Postgres)', () => {
     expect(got.product.imagePath).toContain('sig=');
   });
 
+  it('bulk-imports products from CSV with per-row errors', async () => {
+    const t = await seedTenant(h, 'cat-bulk');
+    const csv = [
+      'name,price,stock,description,currency',
+      'Coke,1500,10,Soft drink,TZS',
+      'Fanta,1200,5,,TZS',
+      ',99,1,missing name,TZS',
+      'Water,abc,2,bad price,TZS',
+    ].join('\n');
+    const res = await withTenant(t, () => products.bulkImportCsv(t, Buffer.from(csv, 'utf8'), 'Owner'));
+    expect(res.created).toBe(2);
+    expect(res.skipped).toBe(2);
+    expect(res.errors).toHaveLength(2);
+
+    const list = await withTenant(t, () => products.list(t, { limit: 100 } as never));
+    expect(list.count).toBe(2);
+  });
+
   it('restocks and adjusts, and refuses to go negative', async () => {
     const t = await seedTenant(h, 'cat-b');
     const created = await withTenant(t, () =>

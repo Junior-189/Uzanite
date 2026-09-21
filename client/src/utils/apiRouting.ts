@@ -67,11 +67,10 @@ export const PLATFORM_PREFIXES: readonly string[] =
   OVERRIDE_DOMAINS.length > 0 ? OVERRIDE_DOMAINS : DEFAULT_PLATFORM_PREFIXES;
 
 // Flows the platform does not implement yet — always legacy, even when the
-// domain prefix is otherwise routed (e.g. product bulk-CSV import).
-export const LEGACY_ONLY_PREFIXES = [
-  '/auth/staff',
-  '/products/bulk',
-] as const;
+// domain prefix is otherwise routed. Currently empty: the last entry
+// (`/auth/staff`) was unused (no legacy route, no client caller). The mechanism
+// remains for any future legacy-only exception.
+export const LEGACY_ONLY_PREFIXES: readonly string[] = [];
 
 export const platformCutoverEnabled: boolean = (import.meta.env.VITE_API_V1 as string) === 'true';
 

@@ -13,6 +13,39 @@ import { LocalStorageService } from '../../storage/local-storage.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
 
+/** Minimal RFC4180-ish CSV parser (quoted fields, CRLF, embedded commas). */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') {
+      row.push(field);
+      field = '';
+    } else if (c === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else if (c !== '\r') field += c;
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((v) => v.trim() !== ''));
+}
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -90,6 +123,67 @@ export class ProductsService {
       products: page.items.map((p) => this.serialize(p as { id: string; imageKey?: string | null })),
       nextCursor: page.nextCursor,
     };
+  }
+
+  /**
+   * Bulk import from CSV (legacy `/products/bulk`). Accepts the legacy column
+   * aliases (name|product_name, price|unit_price, stock|quantity|qty, …) and
+   * returns per-row errors for anything invalid.
+   */
+  async bulkImportCsv(tenantId: string, buffer: Buffer, recordedBy: string) {
+    const rows = parseCsv(buffer.toString('utf8'));
+    const errors: Array<{ row: number; error: string }> = [];
+    if (rows.length < 2) return { success: true, created: 0, skipped: 0, errors, message: 'No rows found' };
+
+    const header = rows[0].map((h) => h.trim().toLowerCase());
+    const col = (...aliases: string[]) => {
+      const i = aliases.map((a) => header.indexOf(a)).find((x) => x >= 0);
+      return i === undefined ? -1 : i;
+    };
+    const nameIdx = col('name', 'product_name', 'product name');
+    const priceIdx = col('price', 'unit_price', 'unit price');
+    const descIdx = col('description', 'desc');
+    const currencyIdx = col('currency');
+    const stockIdx = col('stock', 'quantity', 'qty');
+
+    let created = 0;
+    let skipped = 0;
+    for (let r = 1; r < rows.length; r++) {
+      const cells = rows[r];
+      const val = (i: number) => (i >= 0 ? (cells[i] ?? '').trim() : '');
+      const name = val(nameIdx);
+      const priceRaw = val(priceIdx);
+      if (!name || priceRaw === '') {
+        errors.push({ row: r + 1, error: 'Missing required fields: name and price' });
+        skipped++;
+        continue;
+      }
+      const price = Number(priceRaw);
+      if (!Number.isFinite(price) || price < 0) {
+        errors.push({ row: r + 1, error: 'Invalid price' });
+        skipped++;
+        continue;
+      }
+      const stockRaw = val(stockIdx);
+      const stock = stockRaw === '' ? 0 : Number(stockRaw);
+      if (!Number.isFinite(stock) || stock < 0) {
+        errors.push({ row: r + 1, error: 'Invalid stock (must be >= 0)' });
+        skipped++;
+        continue;
+      }
+      try {
+        await this.create(
+          tenantId,
+          { name, description: val(descIdx), price, currency: val(currencyIdx) || 'TZS', stock } as never,
+          recordedBy
+        );
+        created++;
+      } catch (e) {
+        errors.push({ row: r + 1, error: (e as Error).message });
+        skipped++;
+      }
+    }
+    return { success: true, created, skipped, errors, message: `Imported ${created} product(s), skipped ${skipped}.` };
   }
 
   async create(tenantId: string, input: CreateProductInput, recordedBy: string) {

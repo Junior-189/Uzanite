@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   adjustStockSchema,
@@ -53,6 +54,18 @@ export class ProductsController {
   @Get(':id')
   get(@TenantId() tenantId: string, @Param(new ZodValidationPipe(productIdParam)) params: { id: string }) {
     return this.products.get(tenantId, params.id);
+  }
+
+  @Post('bulk')
+  @RequirePermission('products')
+  @UseInterceptors(FileInterceptor('file'))
+  bulkImport(
+    @TenantId() tenantId: string,
+    @CurrentUser() principal: Principal,
+    @UploadedFile() file?: { buffer: Buffer }
+  ) {
+    if (!file) throw new BadRequestException('CSV file is required');
+    return this.products.bulkImportCsv(tenantId, file.buffer, this.recordedBy(principal));
   }
 
   @Post()

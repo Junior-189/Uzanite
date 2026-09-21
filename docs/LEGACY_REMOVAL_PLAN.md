@@ -47,14 +47,13 @@ operation — do not start until the preconditions below hold.
 These still have **no platform equivalent**; either build them or explicitly
 decide to retire the feature. Deleting now would break them.
 
-- `/products/bulk` — CSV product import (legacy-only). Needs a platform import
-  endpoint (multipart CSV) or explicit retirement.
-- `/auth/staff` — the legacy alternate staff login. Platform staff login exists
-  at `/auth/staff/login`; confirm no client relies on the old path, then retire.
-- **Admin server-only routes** not used by the SPA: `/admin/queues`,
-  `/admin/queues/dead-letters`, `/admin/tenants/:id/export|erase`
-  (`adminQueues.js`, `adminPrivacy.js`). Confirm whether operators depend on
-  them; port or document a replacement.
+- ~~`/products/bulk` CSV import~~ — **done**: platform endpoint with legacy
+  column aliases.
+- ~~`/auth/staff`~~ — **done**: no legacy route and no client caller; retired from
+  the routing layer.
+- ~~Admin server-only routes~~ — **done**: `/admin/queues` + `/dead-letters` ported;
+  admin tenant **export** ported; tenant-wide **erase** intentionally not ported
+  (subject-scoped `/privacy/erase` is the supported path).
 - **Historical data**: MongoDB still holds pre-cutover records for every domain.
   Run identity/reconcile migrations and a final delta drain, and reconcile
   counts per domain before dropping Mongo (see §4.2).

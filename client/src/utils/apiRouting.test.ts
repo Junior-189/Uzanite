@@ -34,13 +34,6 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.apiBaseFor('/orders')).toBe('/api');
   });
 
-  it('never routes legacy-only auth flows to the platform', async () => {
-    const m = await loadWithFlag('true');
-    expect(m.isRoutedToPlatform('/auth/staff/login')).toBe(false);
-    expect(m.apiBaseFor('/auth/staff/login')).toBe('/api');
-    expect(m.isRoutedToPlatform('/products/bulk')).toBe(false);
-  });
-
   it('routes fully-covered domains when enabled', async () => {
     const m = await loadWithFlag('true');
     expect(m.isRoutedToPlatform('/notifications')).toBe(true);
@@ -52,6 +45,7 @@ describe('apiRouting (Strangler cutover)', () => {
     expect(m.isRoutedToPlatform('/contacts')).toBe(true);
     expect(m.isRoutedToPlatform('/recycle-bin')).toBe(true);
     expect(m.isRoutedToPlatform('/products')).toBe(true);
+    expect(m.isRoutedToPlatform('/products/bulk')).toBe(true);
     expect(m.isRoutedToPlatform('/orders')).toBe(true);
     expect(m.isRoutedToPlatform('/orders/abc/receipt')).toBe(true);
     expect(m.isRoutedToPlatform('/expenses')).toBe(true);
@@ -97,12 +91,6 @@ describe('apiRouting (Strangler cutover)', () => {
     const m = await loadWith('false', 'auth,billing');
     expect(m.isRoutedToPlatform('/auth/login')).toBe(false);
     expect(m.apiBaseFor('/billing/plans')).toBe('/api');
-  });
-
-  it('keeps legacy-only sub-paths on legacy even when the prefix is routed', async () => {
-    const m = await loadWithFlag('true');
-    expect(m.isRoutedToPlatform('/products/bulk')).toBe(false);
-    expect(m.apiBaseFor('/products/bulk')).toBe('/api');
   });
 
   it('does not route domains the platform does not implement yet', async () => {
