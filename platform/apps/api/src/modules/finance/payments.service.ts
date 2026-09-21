@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MetricsService } from '../../metrics/metrics.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
+import { decryptPii } from '../../security/pii';
 import { runAsSystem } from '../../context/tenant-context';
 import { OutboxService } from '../../outbox/outbox.service';
 import { OrdersService } from '../commerce/orders.service';
@@ -136,7 +137,7 @@ export class PaymentsService {
               idempotencyKey,
               amount: String(order.total),
               currency: order.currency,
-              phone: input.phone ?? order.customerPhone,
+              phone: input.phone ?? decryptPii(order.customerPhone),
               status: 'initiated',
               initiatedBy: actor,
             },
@@ -168,7 +169,7 @@ export class PaymentsService {
         orderId,
         amount: Number(order.total),
         currency: order.currency,
-        phone: input.phone ?? order.customerPhone,
+        phone: input.phone ?? decryptPii(order.customerPhone),
         method: input.method,
         reference: payment.id,
       });
@@ -244,7 +245,7 @@ export class PaymentsService {
               idempotencyKey,
               amount: String(order.total),
               currency: order.currency,
-              phone: order.customerPhone,
+              phone: decryptPii(order.customerPhone),
               status: 'succeeded',
               proofPath: input.proofPath ?? null,
               raw: { reference: input.reference } as object,

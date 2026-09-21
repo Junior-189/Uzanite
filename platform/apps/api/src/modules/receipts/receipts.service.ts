@@ -94,8 +94,8 @@ export class ReceiptsService {
       receiptNumber,
       business: { name: order.tenant.name, phone: order.tenant.phone, currency: order.tenant.currency },
       customer: {
-        name: order.customerName,
-        phone: order.customerPhone,
+        name: decryptPii(order.customerName),
+        phone: decryptPii(order.customerPhone),
         email: decryptPii(order.customerEmail),
         deliveryLocation: decryptPii(order.deliveryLocation),
       },

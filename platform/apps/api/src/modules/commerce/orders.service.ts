@@ -9,7 +9,7 @@ import { LedgerService } from '../finance/ledger.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
 import { OrderIntakeService, ResolvedItem } from './order-intake.service';
-import { decryptPii, encryptPii } from '../../security/pii';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 
 // ── State machine ────────────────────────────────────────────────────────────
 // PENDING → APPROVED → PENDING_PAYMENT → PAID → DELIVERED
@@ -59,10 +59,12 @@ export class OrdersService {
   private serialize<T extends { id: string }>(order: T): T & { _id: string } {
     // `_id` alias preserves compatibility with Express clients that key on it;
     // encrypted PII fields are decrypted for the response.
-    const row = order as T & { customerEmail?: string | null; deliveryLocation?: string | null; deliveryPhone?: string | null };
+    const row = order as T & { customerName?: string | null; customerPhone?: string | null; customerEmail?: string | null; deliveryLocation?: string | null; deliveryPhone?: string | null };
     return {
       ...order,
       _id: order.id,
+      ...(row.customerName !== undefined ? { customerName: decryptPii(row.customerName) } : {}),
+      ...(row.customerPhone !== undefined ? { customerPhone: decryptPii(row.customerPhone) } : {}),
       ...(row.customerEmail !== undefined ? { customerEmail: decryptPii(row.customerEmail) } : {}),
       ...(row.deliveryLocation !== undefined ? { deliveryLocation: decryptPii(row.deliveryLocation) } : {}),
       ...(row.deliveryPhone !== undefined ? { deliveryPhone: decryptPii(row.deliveryPhone) } : {}),
@@ -97,7 +99,7 @@ export class OrdersService {
     if (query.includeDeleted !== 'true') where.deletedAt = null;
     if (query.status) where.status = query.status;
     if (query.source) where.source = query.source;
-    if (query.customerPhone) where.customerPhone = query.customerPhone;
+    if (query.customerPhone) where.customerPhoneIdx = blindIndex(query.customerPhone);
     if (query.from || query.to) {
       where.createdAt = {};
       if (query.from) (where.createdAt as Prisma.DateTimeFilter).gte = new Date(query.from);
@@ -209,8 +211,9 @@ export class OrdersService {
             tenantId,
             orderNumber,
             clientRef,
-            customerPhone: input.customerPhone,
-            customerName: input.customerName,
+            customerPhone: encryptPii(input.customerPhone) ?? '',
+            customerPhoneIdx: input.customerPhone ? blindIndex(input.customerPhone) : null,
+            customerName: encryptPii(input.customerName) ?? 'Customer',
             // PII at rest: encrypted; the blind-index rollout covers name/phone.
             customerEmail: encryptPii(input.customerEmail) ?? '',
             deliveryLocation: encryptPii(input.deliveryLocation) ?? '',

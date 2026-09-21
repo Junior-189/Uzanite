@@ -15,7 +15,8 @@
     "migrate:identity": "tsx prisma/migration/migrate-identity.ts",
     "migrate:reconcile": "tsx prisma/migration/reconcile.ts",
     "migrate:aliases": "tsx prisma/migration/backfill-identity-aliases.ts",
-    "openapi": "node dist/openapi.js"
+    "openapi": "node dist/openapi.js",
+    "migrate:pii-orders": "tsx prisma/migration/backfill-order-pii.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

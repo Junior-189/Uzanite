@@ -13,6 +13,8 @@ import { PaymentsService } from '../../src/modules/finance/payments.service';
 import { PaymentAdaptersService } from '../../src/modules/finance/payments/payment-adapters.service';
 import { WhatsAppService } from '../../src/modules/messaging/whatsapp.service';
 import { ConversationService } from '../../src/modules/conversation/conversation.service';
+import { decryptPii } from '../../src/security/pii';
+import { isEncrypted } from '@uzanite/messaging';
 import { OutboxService } from '../../src/outbox/outbox.service';
 import { QueueService } from '../../src/queue/queue.service';
 import { UnitOfWorkService } from '../../src/prisma/unit-of-work.service';
@@ -132,7 +134,9 @@ d('conversation flows (Postgres)', () => {
 
     const created = await h.prisma.base.order.findMany({ where: { tenantId } });
     expect(created).toHaveLength(1);
-    expect(created[0].customerName).toBe('Alice');
+    // PII is encrypted at rest; the API decrypts on read.
+    expect(isEncrypted(created[0].customerName)).toBe(true);
+    expect(decryptPii(created[0].customerName)).toBe('Alice');
     expect(Number(created[0].total)).toBe(3000);
     expect(created[0].status).toBe('PENDING');
 

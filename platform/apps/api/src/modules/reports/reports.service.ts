@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ReportKey, ReportQuery } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { periodStart } from '../ledgers/ledger-utils';
+import { decryptPii } from '../../security/pii';
 
 export interface ReportColumn {
   key: string;
@@ -252,7 +253,7 @@ export class ReportsService {
       ],
       rows: rows.map((o) => ({
         number: o.orderNumber,
-        customer: o.customerName,
+        customer: decryptPii(o.customerName),
         status: o.status,
         paymentMethod: o.paymentMethod || '—',
         total: fmtNum(this.money(o.total)),

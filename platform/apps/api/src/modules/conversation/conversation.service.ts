@@ -12,6 +12,7 @@ import { WhatsAppService } from '../messaging/whatsapp.service';
 import { InboundDescriptor } from '../messaging/whatsapp-webhook.service';
 import { runAsSystem } from '../../context/tenant-context';
 import { newId } from '../../ids/id';
+import { decryptPii } from '../../security/pii';
 import { handleCustomerFlow } from './flows/customer-flow';
 import { handleAdminFlow } from './flows/admin-flow';
 import { t } from './flows/i18n';
@@ -290,7 +291,7 @@ export class ConversationService {
       status: o.status,
       currency: o.currency,
       total: Number(o.total),
-      customerName: o.customerName,
+      customerName: decryptPii(o.customerName),
       createdAt: o.createdAt.toISOString(),
       items: (o.items ?? []).map((i) => ({ productName: i.productName, quantity: i.quantity, subtotal: Number(i.subtotal) })),
     });

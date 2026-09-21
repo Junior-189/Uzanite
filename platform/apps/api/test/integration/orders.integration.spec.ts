@@ -12,6 +12,7 @@ import { PaymentsService } from '../../src/modules/finance/payments.service';
 import { PaymentAdaptersService } from '../../src/modules/finance/payments/payment-adapters.service';
 import { UnitOfWorkService } from '../../src/prisma/unit-of-work.service';
 import { runWithRequest } from '../../src/context/tenant-context';
+import { isEncrypted } from '@uzanite/messaging';
 
 const d = hasDb ? describe : describe.skip;
 
@@ -305,5 +306,29 @@ d('orders integration (Postgres)', () => {
     const page2 = await withTenant(t, () => orders.list(t, { limit: 2, cursor: page1.nextCursor } as never));
     const ids = new Set(page1.orders.map((o) => o.id));
     expect(page2.orders.every((o) => !ids.has(o.id))).toBe(true);
+  });
+
+  it('encrypts order PII at rest with a phone blind index and filters by it', async () => {
+    const t = await seedTenant(h, 'ord-pii');
+    const p = await makeProduct(t, 5);
+    const created = await withTenant(t, () =>
+      orders.create(t, { customerName: 'Asha', customerPhone: '255700999888', items: [{ productId: p.id, quantity: 1 }] } as never, 'Owner')
+    );
+
+    // Decrypted on read.
+    expect(created.order.customerName).toBe('Asha');
+    expect(created.order.customerPhone).toBe('255700999888');
+
+    // Ciphertext at rest, with a populated blind index.
+    const raw = await h.prisma.base.order.findUnique({ where: { id: created.order.id } });
+    expect(isEncrypted(raw!.customerName)).toBe(true);
+    expect(isEncrypted(raw!.customerPhone)).toBe(true);
+    expect(raw!.customerPhoneIdx).toBeTruthy();
+
+    // Equality lookup goes through the index.
+    const hit = await withTenant(t, () => orders.list(t, { customerPhone: '255700999888', limit: 20 } as never));
+    expect(hit.orders.map((o) => o.id)).toContain(created.order.id);
+    const miss = await withTenant(t, () => orders.list(t, { customerPhone: '255700000000', limit: 20 } as never));
+    expect(miss.orders).toHaveLength(0);
   });
 });

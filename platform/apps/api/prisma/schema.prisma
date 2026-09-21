@@ -573,6 +573,8 @@ model Order {
   // allowed by PostgreSQL, so the composite unique below stays partial in effect.
   clientRef          String?     @map("client_ref")
   customerPhone      String      @default("") @map("customer_phone")
+  // Blind index (HMAC) for equality lookups on the encrypted phone.
+  customerPhoneIdx   String?     @map("customer_phone_idx")
   customerName       String      @default("Customer") @map("customer_name")
   customerEmail      String      @default("") @map("customer_email")
   deliveryLocation   String      @default("") @map("delivery_location")
@@ -610,7 +612,7 @@ model Order {
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, clientRef])
   @@index([tenantId, status, createdAt])
-  @@index([tenantId, customerPhone, createdAt])
+  @@index([tenantId, customerPhoneIdx])
   @@index([tenantId, deletedAt, id])
   @@index([tenantId, createdAt])
   @@map("orders")

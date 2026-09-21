@@ -108,6 +108,7 @@ Copy `platform/.env.example` → `platform/.env` and populate. Canonical variabl
 | `STORAGE_PROVIDER=local` | yes | Or `s3`/`r2` when implemented |
 | `STORAGE_LOCAL_DIR` | yes | Default `private_uploads_platform`; mount a volume here |
 | `STORAGE_SIGNING_SECRET` | yes | Signs download URLs; falls back to `ENCRYPTION_KEY` → `JWT_SECRET` |
+| `PII_INDEX_KEY` | recommended | HMAC key for blind indexes on encrypted PII (equality search). Falls back to `ENCRYPTION_KEY` |
 | `STORAGE_URL_TTL_SECONDS` | optional | Signed-URL lifetime (default 900) |
 | `MAX_UPLOAD_BYTES` | optional | Upload ceiling (default 5242880) |
 
