@@ -4,6 +4,8 @@ import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { ContactsService } from '../../src/modules/contacts/contacts.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
 import { runWithRequest } from '../../src/context/tenant-context';
+import { isEncrypted } from '@uzanite/messaging';
+import { blindIndex } from '../../src/security/pii';
 
 const d = hasDb ? describe : describe.skip;
 
@@ -77,5 +79,30 @@ d('contacts (Postgres)', () => {
     await withTenant(t, () => contacts.sendEmail(t, '255700111555', { subject: 'Hi', message: 'Line1\nLine2' } as never));
     const event = await h.prisma.base.outboxEvent.findFirst({ where: { tenantId: t, type: 'email.send' } });
     expect(event).toBeTruthy();
+  });
+
+  it('encrypts contact PII at rest and finds it via the phone blind index', async () => {
+    const t = await seedTenant('ct-pii');
+    const added = await withTenant(t, () => contacts.add(t, { phone: '255700111999', name: 'Neema' } as never));
+    expect(added.contact.phone).toBe('255700111999');
+    expect(added.contact.name).toBe('Neema');
+
+    const updatedEmail = await withTenant(t, () => contacts.update(t, '255700111999', { email: 'neema@x.com' } as never));
+    expect(updatedEmail.contact.email).toBe('neema@x.com');
+
+    const raw = await h.prisma.base.whatsAppContact.findUnique({ where: { id: added.contact.id } });
+    expect(isEncrypted(raw!.phone)).toBe(true);
+    expect(isEncrypted(raw!.name)).toBe(true);
+    expect(isEncrypted(raw!.email)).toBe(true);
+    expect(raw!.phoneIdx).toBe(blindIndex('255700111999'));
+
+    // Duplicate detection + lookup go through the index.
+    const again = await withTenant(t, () => contacts.add(t, { phone: '255700111999' } as never));
+    expect(again.message).toMatch(/already exists/);
+
+    // A numeric search resolves via the blind index; the row decrypts on read.
+    const list = await withTenant(t, () => contacts.list(t, { search: '255700111999', limit: 20 } as never));
+    expect(list.contacts).toHaveLength(1);
+    expect(list.contacts[0].name).toBe('Neema');
   });
 });

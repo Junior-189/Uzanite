@@ -5,6 +5,7 @@ import { WhatsAppService } from '../messaging/whatsapp.service';
 import { OutboxService } from '../../outbox/outbox.service';
 import { BillingService } from '../billing/billing.service';
 import { newId } from '../../ids/id';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -55,7 +56,7 @@ export class BroadcastService {
           tenantId,
           subject: (input.subject ?? '').slice(0, 200),
           body: input.message,
-          recipients: emailContacts.map((c) => c.email),
+          recipients: emailContacts.map((c) => decryptPii(c.email)),
           count: emailContacts.length,
           channel: channel === 'both' ? 'both' : 'email',
         },
@@ -66,7 +67,7 @@ export class BroadcastService {
     if (wantWhatsapp) {
       for (const contact of contacts) {
         await this.whatsapp
-          .enqueueText(tenantId, { to: contact.phone, text: `${input.message}${optOut}` }, actor)
+          .enqueueText(tenantId, { to: decryptPii(contact.phone), text: `${input.message}${optOut}` }, actor)
           .catch(() => undefined);
       }
     }
@@ -75,7 +76,7 @@ export class BroadcastService {
         type: 'email.send',
         tenantId,
         payload: {
-          to: contact.email,
+          to: decryptPii(contact.email),
           subject: input.subject || 'Broadcast',
           html: `<div style="font-family:Arial,sans-serif;line-height:1.6;white-space:pre-wrap">${input.message}${optOut}</div>`,
         },
@@ -108,7 +109,7 @@ export class BroadcastService {
     });
     return {
       success: true,
-      contacts: rows.map((c) => ({ _id: c.id, id: c.id, name: c.name, email: c.email, phone: c.phone, lastMessageAt: c.lastMessageAt })),
+      contacts: rows.map((c) => ({ _id: c.id, id: c.id, name: decryptPii(c.name), email: decryptPii(c.email), phone: decryptPii(c.phone), lastMessageAt: c.lastMessageAt })),
     };
   }
 
@@ -122,13 +123,13 @@ export class BroadcastService {
     if (!EMAIL_RE.test(email)) throw new BadRequestException('A valid email is required');
     // Placeholder phone keeps the (tenantId, phone) uniqueness satisfied.
     const phone = `email::${email}`;
-    const existing = await this.prisma.db.whatsAppContact.findFirst({ where: { tenantId, phone } });
+    const existing = await this.prisma.db.whatsAppContact.findFirst({ where: { tenantId, phoneIdx: blindIndex(phone) } });
     if (existing) throw new ConflictException('This email is already in your contacts');
 
     const contact = await this.prisma.db.whatsAppContact.create({
-      data: { id: newId(), tenantId, phone, email, name: input.name ?? '', optIn: true, lastMessageAt: new Date() },
+      data: { id: newId(), tenantId, phone: encryptPii(phone) ?? '', phoneIdx: blindIndex(phone), email: encryptPii(email) ?? '', name: encryptPii(input.name) ?? '', optIn: true, lastMessageAt: new Date() },
     });
-    return { success: true, contact: { ...contact, _id: contact.id } };
+    return { success: true, contact: { ...contact, _id: contact.id, name: decryptPii(contact.name), phone: decryptPii(contact.phone), email: decryptPii(contact.email) } };
   }
 
   async importEmails(tenantId: string, input: BroadcastImportInput) {
@@ -150,10 +151,10 @@ export class BroadcastService {
     for (const entry of unique) {
       const email = entry.email.toLowerCase();
       const phone = `email::${email}`;
-      const existing = await this.prisma.db.whatsAppContact.findFirst({ where: { tenantId, phone } });
+      const existing = await this.prisma.db.whatsAppContact.findFirst({ where: { tenantId, phoneIdx: blindIndex(phone) } });
       if (existing) {
         const data: { name?: string } = {};
-        if (!existing.name && entry.name) data.name = entry.name;
+        if (!existing.name && entry.name) data.name = encryptPii(entry.name) ?? '';
         if (Object.keys(data).length) {
           await this.prisma.db.whatsAppContact.update({ where: { id: existing.id }, data });
           updated++;
@@ -161,7 +162,7 @@ export class BroadcastService {
         continue;
       }
       await this.prisma.db.whatsAppContact.create({
-        data: { id: newId(), tenantId, phone, email, name: entry.name, optIn: false, consentStatus: 'pending', lastMessageAt: new Date() },
+        data: { id: newId(), tenantId, phone: encryptPii(phone) ?? '', phoneIdx: blindIndex(phone), email: encryptPii(email) ?? '', name: encryptPii(entry.name) ?? '', optIn: false, consentStatus: 'pending', lastMessageAt: new Date() },
       });
       inserted++;
     }

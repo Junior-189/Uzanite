@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { blindIndex, decryptPii } from '../../src/security/pii';
 import { randomUUID } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { MetaClient } from '@uzanite/messaging';
@@ -113,8 +114,9 @@ d('messaging (WhatsApp Cloud) integration (Postgres)', () => {
     expect(first.failed).toBe(0);
     expect(first.inbound).toHaveLength(1);
 
-    const contact = await h.prisma.base.whatsAppContact.findFirst({ where: { tenantId, phone: '255700111222' } });
+    const contact = await h.prisma.base.whatsAppContact.findFirst({ where: { tenantId, phoneIdx: blindIndex('255700111222') } });
     expect(contact).toBeTruthy();
+    expect(decryptPii(contact!.phone)).toBe('255700111222');
     const messages = await h.prisma.base.message.findMany({ where: { tenantId, direction: 'inbound' } });
     expect(messages).toHaveLength(1);
     expect(messages[0].providerMessageId).toBe('wamid.IN-1');

@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { OutboxService } from '../../outbox/outbox.service';
 import { newId } from '../../ids/id';
+import { blindIndex, encryptPii } from '../../security/pii';
 import { runAsSystem } from '../../context/tenant-context';
 
 const STATUS_MAP: Record<string, 'sent' | 'delivered' | 'read' | 'failed'> = {
@@ -154,16 +155,17 @@ export class WhatsAppWebhookService {
     const messageType = message.interactive ? 'interactive' : (message.type ?? 'text');
 
     const contact = await this.prisma.db.whatsAppContact.upsert({
-      where: { tenantId_phone: { tenantId, phone } },
-      update: { lastMessageAt: new Date(), lastMessage: text.slice(0, 200), messageCount: { increment: 1 } },
+      where: { tenantId_phoneIdx: { tenantId, phoneIdx: blindIndex(phone) } },
+      update: { lastMessageAt: new Date(), lastMessage: encryptPii(text.slice(0, 200)) ?? '', messageCount: { increment: 1 } },
       create: {
         id: newId(),
         tenantId,
-        phone,
+        phone: encryptPii(phone) ?? '',
+        phoneIdx: blindIndex(phone),
         jid: `${phone}@s.whatsapp.net`,
         messageCount: 1,
         lastMessageAt: new Date(),
-        lastMessage: text.slice(0, 200),
+        lastMessage: encryptPii(text.slice(0, 200)) ?? '',
       },
     });
 

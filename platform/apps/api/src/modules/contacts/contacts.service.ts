@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { OutboxService } from '../../outbox/outbox.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 
 // Contacts are stored on the tenant-scoped WhatsAppContact model (the same row
 // the messaging pipeline upserts). This service exposes the legacy-compatible
@@ -22,20 +23,25 @@ export class ContactsService {
     return String(phone ?? '').replace(/[^\d]/g, '');
   }
 
-  // Adds the `_id` alias the client keys rows on.
-  private serialize<T extends { id: string }>(row: T): T & { _id: string } {
-    return { ...row, _id: row.id };
+  // Adds the `_id` alias the client keys rows on, and decrypts PII for output.
+  private serialize<T extends { id: string; name?: string | null; phone?: string | null; email?: string | null }>(
+    row: T
+  ): T & { _id: string } {
+    return {
+      ...row,
+      _id: row.id,
+      ...(row.name !== undefined ? { name: decryptPii(row.name) } : {}),
+      ...(row.phone !== undefined ? { phone: decryptPii(row.phone) } : {}),
+      ...(row.email !== undefined ? { email: decryptPii(row.email) } : {}),
+    };
   }
 
   async list(tenantId: string, query: ListContactsQuery) {
     const where: Prisma.WhatsAppContactWhereInput = { tenantId, deletedAt: null };
-    if (query.search) {
-      where.OR = [
-        { name: { contains: query.search, mode: 'insensitive' } },
-        { phone: { contains: query.search } },
-        { email: { contains: query.search, mode: 'insensitive' } },
-      ];
-    }
+    // PII is encrypted, so substring search is impossible; a numeric search is
+    // matched exactly via the phone blind index (the SPA also filters locally).
+    const digits = this.normalize(query.search ?? '');
+    if (digits.length >= 4) where.phoneIdx = blindIndex(digits);
     const page = await paginate<{ id: string }>({
       findMany: (args) => this.prisma.db.whatsAppContact.findMany(args as never) as Promise<{ id: string }[]>,
       where: where as Record<string, unknown>,
@@ -49,16 +55,17 @@ export class ContactsService {
     const phone = this.normalize(input.phone);
     if (phone.length < 5) throw new BadRequestException('Invalid phone number');
 
-    const existing = await this.prisma.db.whatsAppContact.findFirst({ where: { tenantId, phone } });
+    const existing = await this.prisma.db.whatsAppContact.findFirst({ where: { tenantId, phoneIdx: blindIndex(phone) } });
     if (existing) return { success: true, contact: this.serialize(existing), message: 'Contact already exists' };
 
     const contact = await this.prisma.db.whatsAppContact.create({
       data: {
         id: newId(),
         tenantId,
-        phone,
+        phone: encryptPii(phone) ?? '',
+        phoneIdx: blindIndex(phone),
         jid: `${phone}@s.whatsapp.net`,
-        name: input.name ?? '',
+        name: encryptPii(input.name) ?? '',
         messageCount: 0,
         lastMessageAt: new Date(),
         lastMessage: '[Manually added]',
@@ -69,7 +76,7 @@ export class ContactsService {
 
   private async findOrThrow(tenantId: string, phoneRaw: string) {
     const phone = this.normalize(phoneRaw);
-    const contact = await this.prisma.db.whatsAppContact.findFirst({ where: { tenantId, phone } });
+    const contact = await this.prisma.db.whatsAppContact.findFirst({ where: { tenantId, phoneIdx: blindIndex(phone) } });
     if (!contact) throw new NotFoundException('Contact not found');
     return contact;
   }
@@ -77,8 +84,8 @@ export class ContactsService {
   async update(tenantId: string, phoneRaw: string, input: UpdateContactInput) {
     const contact = await this.findOrThrow(tenantId, phoneRaw);
     const data: Prisma.WhatsAppContactUpdateInput = {};
-    if (typeof input.name === 'string') data.name = input.name.trim();
-    if (typeof input.email === 'string') data.email = input.email.trim().toLowerCase();
+    if (typeof input.name === 'string') data.name = encryptPii(input.name.trim()) ?? '';
+    if (typeof input.email === 'string') data.email = encryptPii(input.email.trim().toLowerCase()) ?? '';
     const updated = await this.prisma.db.whatsAppContact.update({ where: { id: contact.id }, data });
     return { success: true, contact: this.serialize(updated), message: 'Contact updated' };
   }
@@ -99,7 +106,7 @@ export class ContactsService {
   async restore(tenantId: string, phoneRaw: string) {
     const phone = this.normalize(phoneRaw);
     const res = await this.prisma.db.whatsAppContact.updateMany({
-      where: { tenantId, phone, deletedAt: { not: null } },
+      where: { tenantId, phoneIdx: blindIndex(phone), deletedAt: { not: null } },
       data: { deletedAt: null, deletedBy: null },
     });
     if (res.count === 0) throw new NotFoundException('Contact not found in recycle bin');

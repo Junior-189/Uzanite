@@ -977,6 +977,8 @@ model WhatsAppContact {
   id            String    @id @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid
   phone         String
+  // Blind index (HMAC) for equality lookups on the encrypted phone.
+  phoneIdx      String?   @map("phone_idx")
   jid           String    @default("")
   name          String    @default("")
   email         String    @default("")
@@ -999,7 +1001,7 @@ model WhatsAppContact {
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   messages Message[]
 
-  @@unique([tenantId, phone])
+  @@unique([tenantId, phoneIdx])
   // Ordered to cover the compound keyset cursor (lastMessageAt DESC, id DESC).
   @@index([tenantId, lastMessageAt, id])
   @@map("whatsapp_contacts")

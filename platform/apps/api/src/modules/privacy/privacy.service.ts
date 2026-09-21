@@ -3,6 +3,7 @@ import { ConsentInput, PrivacyEraseInput, PrivacyExportQuery, ListPrivacyRequest
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
+import { blindIndex, decryptPii } from '../../security/pii';
 
 interface Actor {
   userId: string;
@@ -66,12 +67,14 @@ export class PrivacyService {
     const email = lower(query.email);
     const subjectScoped = !!(phone || email);
 
-    const contactWhere = subjectScoped
-      ? { tenantId, ...(phone ? { phone } : {}), ...(email ? { email } : {}) }
-      : { tenantId };
-    const orderWhere = subjectScoped
-      ? { tenantId, ...(phone ? { customerPhone: phone } : {}), ...(email ? { customerEmail: email } : {}) }
-      : { tenantId };
+    // During the PII rollout a subject's rows may still be plaintext; match the
+    // blind index OR the legacy plaintext so exports work before the backfill.
+    const contactWhere: Record<string, unknown> = subjectScoped ? { tenantId } : { tenantId };
+    if (phone) contactWhere.OR = [{ phoneIdx: blindIndex(phone) }, { phone }];
+    else if (email) contactWhere.email = email;
+    const orderWhere: Record<string, unknown> = subjectScoped ? { tenantId } : { tenantId };
+    if (phone) orderWhere.OR = [{ customerPhoneIdx: blindIndex(phone) }, { customerPhone: phone }];
+    else if (email) orderWhere.customerEmail = email;
 
     const [tenant, contacts, orders, messages, consents] = await Promise.all([
       this.prisma.db.tenant.findFirst({

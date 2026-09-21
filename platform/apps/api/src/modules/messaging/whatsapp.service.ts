@@ -16,6 +16,7 @@ import { OutboxService } from '../../outbox/outbox.service';
 import { QueueService } from '../../queue/queue.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
+import { decryptPii } from '../../security/pii';
 import { encrypt, tryDecrypt } from '../../crypto/crypto';
 
 type AccountRow = {
@@ -201,8 +202,9 @@ export class WhatsAppService {
       take: limit + 1,
     });
     const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const nextCursor = hasMore && items.length ? items[items.length - 1].id : null;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore && page.length ? page[page.length - 1].id : null;
+    const items = page.map((c) => ({ ...c, name: decryptPii(c.name), phone: decryptPii(c.phone), email: decryptPii(c.email), lastMessage: decryptPii(c.lastMessage) }));
     return { success: true, count: items.length, conversations: items, nextCursor };
   }
 

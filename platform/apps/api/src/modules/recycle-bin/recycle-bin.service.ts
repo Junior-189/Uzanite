@@ -4,6 +4,7 @@ import { OrdersService } from '../commerce/orders.service';
 import { ProductsService } from '../catalog/products.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { decryptPii } from '../../security/pii';
 
 export type RecycleBinType = 'orders' | 'products' | 'notifications' | 'contacts';
 
@@ -34,7 +35,7 @@ export class RecycleBinService {
       this.prisma.db.notification.findMany({ where: { tenantId, deletedAt: { not: null } }, orderBy: { updatedAt: 'desc' }, take: LIST_LIMIT }),
       this.prisma.db.whatsAppContact.findMany({ where: { tenantId, deletedAt: { not: null } }, orderBy: { updatedAt: 'desc' }, take: LIST_LIMIT }),
     ]);
-    return { success: true, data: { products, orders, notifications, contacts } };
+    return { success: true, data: { products, orders, notifications, contacts: contacts.map((c) => ({ ...c, name: decryptPii(c.name), phone: decryptPii(c.phone), email: decryptPii(c.email) })) } };
   }
 
   async restore(tenantId: string, type: RecycleBinType, id: string, actor: string) {
