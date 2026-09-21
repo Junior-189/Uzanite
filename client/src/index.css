@@ -45,7 +45,7 @@
   --color-sidebar-hover: #1e293b;
   --color-sidebar-active: #11503a;
 
-  --font-serif: 'Playfair Display', 'Georgia', serif;
+  --font-serif: 'Georgia', 'Times New Roman', serif;
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
@@ -55,7 +55,7 @@ html {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--color-gray-50);
   color: var(--color-gray-900);
   line-height: 1.6;

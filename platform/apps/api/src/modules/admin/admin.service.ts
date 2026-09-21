@@ -105,38 +105,4 @@ export class AdminService {
     return { success: true, plan: input.plan };
   }
 
-  async impersonate(tenantId: string, actorUserId: string, ip?: string, userAgent?: string) {
-    const tenant = await this.findTenant(tenantId);
-    const owner = await runAsSystem(() =>
-      this.prisma.db.membership.findFirst({ where: { tenantId, role: 'owner' }, include: { user: true } })
-    );
-    if (!owner) throw new NotFoundException('Tenant owner not found');
-
-    // Short-lived, explicitly attributed impersonation token.
-    const token = await this.tokens.signAccess(
-      {
-        userId: owner.userId,
-        tenantId,
-        membershipId: owner.id,
-        role: owner.role,
-        permissions: owner.permissions,
-        tokenVersion: owner.user.tokenVersion,
-        impersonatedBy: actorUserId,
-      },
-      this.config.get<string>('IMPERSONATION_TTL') ?? '30m'
-    );
-
-    await this.prisma.db.activityLog.create({
-      data: {
-        tenantId,
-        userId: actorUserId,
-        page: 'admin/impersonate',
-        action: 'impersonate',
-        ip,
-        userAgent,
-      },
-    });
-
-    return { success: true, token, tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name } };
-  }
 }

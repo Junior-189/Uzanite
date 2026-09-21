@@ -79,10 +79,4 @@ export class AdminController {
     return this.admin.setPlan(id, body as never);
   }
 
-  @RateLimit({ limit: 10, windowSeconds: 60, keyPrefix: 'admin:impersonate', scope: 'user' })
-  @Post('tenants/:id/impersonate')
-  impersonate(@CurrentUser() principal: Principal, @Param(new ZodValidationPipe(adminTenantIdParam)) { id }: { id: string }, @Req() req: Request) {
-    assertPlatformAdmin(principal);
-    return this.admin.impersonate(id, principal.userId, req.ip, req.headers['user-agent'] as string | undefined);
-  }
 }

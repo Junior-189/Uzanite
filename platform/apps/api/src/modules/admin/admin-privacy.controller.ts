@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Controller,
   ForbiddenException,
   Get,
@@ -49,13 +48,4 @@ export class AdminPrivacyController {
     );
   }
 
-  @Post('tenants/:id/erase')
-  eraseTenant(@CurrentUser() principal: Principal) {
-    if (principal.platformRole !== 'super_admin') throw new ForbiddenException('Super admin only');
-    // The platform intentionally does NOT support blanket tenant deletion:
-    // financial records must be retained, and PII erasure is subject-scoped.
-    throw new BadRequestException(
-      'Tenant-wide erasure is not supported. Erase personal data per subject via POST /api/v1/privacy/erase.'
-    );
-  }
 }

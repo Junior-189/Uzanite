@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
-import { LangProvider } from './context/LangContext';
+import { LangProvider, useLang } from './context/LangContext';
 import { ThemeProvider } from './components/landing/ThemeContext';
 import AuthGuard from './components/AuthGuard';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -10,6 +10,16 @@ import Layout from './components/Layout';
 import UpdateBanner from './components/UpdateBanner';
 import FeatureDisabled from './components/FeatureDisabled';
 import { useFeatureFlags } from './features/featureFlags';
+
+function StatusRoute({ titleKey, descKey }) {
+  const { t } = useLang();
+  return (
+    <div className="text-center py-16">
+      <h2>{t(titleKey)}</h2>
+      <p>{t(descKey)}</p>
+    </div>
+  );
+}
 
 const Landing = lazy(() => import('./pages/Landing'));
 const Login = lazy(() => import('./pages/Login'));
@@ -103,8 +113,8 @@ function AppRoutes() {
         <Route path="/admin/login.html" element={<Login />} />
         <Route path="/admin/change-password.html" element={<ChangePassword />} />
         <Route path="/admin/reset-password.html" element={<ResetPassword />} />
-        <Route path="/admin/waiting-approval.html" element={<div className="text-center py-16"><h2>Waiting for approval</h2><p>Please wait for admin to approve your account.</p></div>} />
-        <Route path="/admin/whatsapp-verification.html" element={<div className="text-center py-16"><h2>WhatsApp Verification</h2><p>Connect your WhatsApp to continue.</p></div>} />
+        <Route path="/admin/waiting-approval.html" element={<StatusRoute titleKey="approval.waiting_title" descKey="approval.waiting_desc" />} />
+        <Route path="/admin/whatsapp-verification.html" element={<StatusRoute titleKey="approval.whatsapp_title" descKey="approval.whatsapp_desc" />} />
         <Route path="/admin" element={<AuthGuard><Layout /></AuthGuard>}>
           <Route index element={<AdminIndex />} />
           <Route path="dashboard" element={<FeatureGuard pageKey="dashboard"><Dashboard /></FeatureGuard>} />

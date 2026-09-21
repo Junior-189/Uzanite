@@ -46,11 +46,6 @@ d('admin ops: privacy + queues (Postgres)', () => {
     expect(res.success).toBe(true);
   });
 
-  it('refuses tenant-wide erasure with actionable guidance', async () => {
-    await seedTenant('priv-erase');
-    expect(() => privacy.eraseTenant(admin())).toThrow(/not supported/i);
-  });
-
   it('reports queue stats and dead letters', async () => {
     await queue.add('email', 'smoke', { hello: 'world' });
     const stats = await queuesAdmin.stats(admin());
