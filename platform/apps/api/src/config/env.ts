@@ -36,7 +36,13 @@ export const envSchema = z
     REDIS_URL: z.string().optional().default(''),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
     JWT_ACCESS_TTL: z.string().default('15m'),
-    JWT_REFRESH_TTL_DAYS: z.coerce.number().int().default(30),
+    JWT_REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+    // Optional key set for `kid`-based rotation: JSON array of
+    // [{ "kid": "...", "secret": "..." }]. `JWT_ACTIVE_KID` selects the signing
+    // key; tokens are verified against their header `kid`. Falls back to
+    // JWT_SECRET (kid "default") when unset.
+    JWT_KEYS: z.string().optional().default(''),
+    JWT_ACTIVE_KID: z.string().optional().default(''),
     ENCRYPTION_KEY: z.string().optional().default(''),
     APP_URL: z.string().default('http://localhost:4000'),
     PUBLIC_APP_URL: z.string().optional().default(''),
@@ -63,6 +69,15 @@ export const envSchema = z
     // `x-metrics-token` or `?token=`). When unset, /metrics is only exposed in
     // non-production environments.
     METRICS_TOKEN: z.string().optional().default(''),
+    // Private file storage (product images, payment proofs). Local disk by
+    // default; S3/R2 can be added behind the same interface.
+    STORAGE_PROVIDER: z.enum(['local', 's3']).optional().default('local'),
+    STORAGE_LOCAL_DIR: z.string().optional().default('private_uploads_platform'),
+    // HMAC secret for signed download URLs. Falls back to ENCRYPTION_KEY then
+    // JWT_SECRET when unset (a warning is logged).
+    STORAGE_SIGNING_SECRET: z.string().optional().default(''),
+    STORAGE_URL_TTL_SECONDS: z.coerce.number().int().default(900),
+    MAX_UPLOAD_BYTES: z.coerce.number().int().default(5 * 1024 * 1024),
     // Observability (all optional — logging-only when unset).
     SENTRY_DSN: z.string().optional().default(''),
     APP_RELEASE: z.string().optional().default('unknown'),
@@ -102,6 +117,7 @@ export const envSchema = z
     require(cfg.RLS_ENABLED === 'true', 'RLS_ENABLED', 'RLS_ENABLED must be "true" in production (non-owner DB role)');
     require(!!cfg.REDIS_URL, 'REDIS_URL', 'REDIS_URL is required in production (shared rate limits, lockouts, queues)');
     require(!!cfg.ENCRYPTION_KEY, 'ENCRYPTION_KEY', 'ENCRYPTION_KEY is required in production (encrypts per-tenant Meta tokens)');
+    require(!!cfg.STORAGE_SIGNING_SECRET, 'STORAGE_SIGNING_SECRET', 'STORAGE_SIGNING_SECRET is required in production (signed private-file URLs)');
     const origins = cfg.CORS_ORIGINS.split(',')
       .map((o) => o.trim())
       .filter(Boolean);

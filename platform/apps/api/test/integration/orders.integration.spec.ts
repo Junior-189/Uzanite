@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { ProductsService } from '../../src/modules/catalog/products.service';
+import { LocalStorageService } from '../../src/storage/local-storage.service';
 import { StockService } from '../../src/modules/catalog/stock.service';
 import { OrdersService } from '../../src/modules/commerce/orders.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
@@ -11,6 +12,7 @@ import { PaymentsService } from '../../src/modules/finance/payments.service';
 import { PaymentAdaptersService } from '../../src/modules/finance/payments/payment-adapters.service';
 import { UnitOfWorkService } from '../../src/prisma/unit-of-work.service';
 import { runWithRequest } from '../../src/context/tenant-context';
+import { isEncrypted } from '@uzanite/messaging';
 
 const d = hasDb ? describe : describe.skip;
 
@@ -36,7 +38,7 @@ d('orders integration (Postgres)', () => {
     const uow = new UnitOfWorkService(h.prisma);
     const billing = h.billing;
     const ledger = new LedgerService(h.prisma);
-    products = new ProductsService(h.prisma, stock);
+    products = new ProductsService(h.prisma, stock, new LocalStorageService(h.config));
     orders = new OrdersService(h.prisma, stock, outbox, billing, ledger);
     // OrdersService.confirmPayment was removed in M13 because it moved an order
     // to PAID without writing a Payment or ledger entry. Settlement now always
@@ -263,6 +265,24 @@ d('orders integration (Postgres)', () => {
     expect(paid).toHaveLength(1);
   });
 
+  it('does not double-credit a settled cash order when confirm-payment is replayed', async () => {
+    const t = await seedTenant(h, 'ord-cash-settle');
+    const p = await makeProduct(t, 10);
+    const res = await withTenant(t, () => orders.createManual(t, { customerName: 'Walk-in', items: [{ productId: p.id, quantity: 1 }] } as never, 'Owner'));
+
+    // Cash sales post their own ledger credit but create no Payment row.
+    const creditsBefore = await h.prisma.base.ledgerEntry.count({ where: { tenantId: t, refType: 'order', refId: res.order.id, direction: 'credit' } });
+    expect(creditsBefore).toBe(1);
+
+    await expect(
+      withTenant(t, () => payments.confirmManual(t, res.order.id, { method: 'Cash', reference: 'dup' } as never, 'Owner'))
+    ).rejects.toThrow(/already settled/i);
+
+    const creditsAfter = await h.prisma.base.ledgerEntry.count({ where: { tenantId: t, refType: 'order', refId: res.order.id, direction: 'credit' } });
+    expect(creditsAfter).toBe(1);
+    expect(await h.prisma.base.payment.count({ where: { tenantId: t, orderId: res.order.id } })).toBe(0);
+  });
+
   it('isolates orders between tenants', async () => {
     const a = await seedTenant(h, 'ord-j');
     const b = await seedTenant(h, 'ord-k');
@@ -286,5 +306,29 @@ d('orders integration (Postgres)', () => {
     const page2 = await withTenant(t, () => orders.list(t, { limit: 2, cursor: page1.nextCursor } as never));
     const ids = new Set(page1.orders.map((o) => o.id));
     expect(page2.orders.every((o) => !ids.has(o.id))).toBe(true);
+  });
+
+  it('encrypts order PII at rest with a phone blind index and filters by it', async () => {
+    const t = await seedTenant(h, 'ord-pii');
+    const p = await makeProduct(t, 5);
+    const created = await withTenant(t, () =>
+      orders.create(t, { customerName: 'Asha', customerPhone: '255700999888', items: [{ productId: p.id, quantity: 1 }] } as never, 'Owner')
+    );
+
+    // Decrypted on read.
+    expect(created.order.customerName).toBe('Asha');
+    expect(created.order.customerPhone).toBe('255700999888');
+
+    // Ciphertext at rest, with a populated blind index.
+    const raw = await h.prisma.base.order.findUnique({ where: { id: created.order.id } });
+    expect(isEncrypted(raw!.customerName)).toBe(true);
+    expect(isEncrypted(raw!.customerPhone)).toBe(true);
+    expect(raw!.customerPhoneIdx).toBeTruthy();
+
+    // Equality lookup goes through the index.
+    const hit = await withTenant(t, () => orders.list(t, { customerPhone: '255700999888', limit: 20 } as never));
+    expect(hit.orders.map((o) => o.id)).toContain(created.order.id);
+    const miss = await withTenant(t, () => orders.list(t, { customerPhone: '255700000000', limit: 20 } as never));
+    expect(miss.orders).toHaveLength(0);
   });
 });

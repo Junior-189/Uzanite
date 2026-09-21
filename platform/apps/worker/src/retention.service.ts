@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
+import { workerPrisma } from './prisma-client';
+import { LeaderLock } from './leader-lock';
 
 /**
  * Data retention sweep.
@@ -30,12 +32,14 @@ import { PrismaClient } from '@prisma/client';
 @Injectable()
 export class RetentionService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(RetentionService.name);
-  private readonly prisma = new PrismaClient();
+  private readonly prisma = workerPrisma;
   private readonly intervalMs: number;
   private readonly batchSize: number;
   private readonly policy: Array<{ table: string; column: string; days: number; label: string }>;
+  private readonly messageDays: number;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private readonly lock: LeaderLock;
 
   constructor(config: ConfigService) {
     const interval = Number(config.get<string>('RETENTION_INTERVAL_MS') ?? '');
@@ -78,6 +82,11 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
         label: 'activity/audit logs',
       },
     ];
+
+    // Message bodies are personal data. Redacted (not deleted) so delivery
+    // history stays intact. 0 disables (opt-in for existing deployments).
+    this.messageDays = days('RETENTION_MESSAGE_DAYS', 0);
+    this.lock = new LeaderLock(config);
   }
 
   async onApplicationBootstrap(): Promise<void> {
@@ -97,6 +106,11 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
   async runOnce(): Promise<Record<string, number>> {
     if (this.running) return {};
     this.running = true;
+    const ttl = Math.max(60, Math.ceil(this.intervalMs / 1000) * 2);
+    if (!(await this.lock.acquire('retention', ttl))) {
+      this.running = false;
+      return {};
+    }
     const deleted: Record<string, number> = {};
 
     try {
@@ -118,11 +132,25 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
         }
       }
 
+      if (this.messageDays > 0) {
+        let redacted = 0;
+        for (;;) {
+          const count = await this.redactMessageBatch(this.messageDays);
+          redacted += count;
+          if (count < this.batchSize) break;
+        }
+        if (redacted > 0) {
+          deleted.messages_redacted = redacted;
+          this.logger.log(`Retention: redacted ${redacted} message body(ies) older than ${this.messageDays}d`);
+        }
+      }
+
       if (Object.keys(deleted).length === 0) {
         this.logger.debug('Retention sweep: nothing past its retention period');
       }
       return deleted;
     } finally {
+      await this.lock.release('retention');
       this.running = false;
     }
   }
@@ -156,8 +184,26 @@ export class RetentionService implements OnApplicationBootstrap, OnApplicationSh
     });
   }
 
+  /** Pseudonymises old message bodies/payloads (keeps delivery metadata). */
+  private async redactMessageBatch(days: number): Promise<number> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', true)`;
+      return tx.$executeRawUnsafe(
+        `UPDATE "messages" SET "text" = '[redacted]', "raw" = '{}'::jsonb
+         WHERE ctid IN (
+           SELECT ctid FROM "messages"
+           WHERE "created_at" < $1 AND "text" <> '[redacted]'
+           LIMIT $2
+         )`,
+        cutoff,
+        this.batchSize
+      );
+    });
+  }
+
   async onApplicationShutdown(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
-    await this.prisma.$disconnect();
+    await this.lock.onModuleDestroy();
   }
 }

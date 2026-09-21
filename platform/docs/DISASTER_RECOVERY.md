@@ -50,6 +50,8 @@ Run from cron on a host that can reach the database:
   scripts/backup-postgres.sh >> /var/log/uzanite-backup.log 2>&1
 ```
 
+By default the script **refuses** to write an unencrypted dump (`BACKUP_ENCRYPTION_PASSPHRASE` must be set; override only with `ALLOW_UNENCRYPTED_BACKUP=true`).
+
 The script refuses to keep a dump that fails `pg_restore --list` or that
 contains fewer than 10 tables, and it prunes old backups only *after* a
 successful verified run — so a failing job can never delete your last good copy.

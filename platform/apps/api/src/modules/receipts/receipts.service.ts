@@ -2,6 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { buildReceiptData, ListReceiptsQuery, ReceiptData } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OutboxService } from '../../outbox/outbox.service';
+import { ReceiptPdfService } from './receipt-pdf.service';
+import { decryptPii } from '../../security/pii';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
 
@@ -17,7 +20,30 @@ const money = (amount: number, currency: string): string =>
 
 @Injectable()
 export class ReceiptsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pdf: ReceiptPdfService,
+    private readonly outbox: OutboxService
+  ) {}
+
+  /** Renders (generating if needed) an order's receipt as a PDF buffer. */
+  async pdfForOrder(tenantId: string, orderId: string): Promise<Buffer> {
+    let receipt = await this.prisma.db.receipt.findFirst({ where: { tenantId, orderId, type: 'order' } });
+    if (!receipt) {
+      await this.generateForOrder(tenantId, orderId);
+      receipt = await this.prisma.db.receipt.findFirst({ where: { tenantId, orderId, type: 'order' } });
+    }
+    if (!receipt) throw new NotFoundException('Receipt not found for this order');
+    return this.pdf.render(receipt.data as unknown as ReceiptData);
+  }
+
+  /** Queues delivery of an order's receipt (worker sends it). */
+  async sendReceipt(tenantId: string, orderId: string) {
+    const order = await this.prisma.db.order.findFirst({ where: { id: orderId, tenantId, deletedAt: null }, select: { id: true } });
+    if (!order) throw new NotFoundException('Order not found');
+    await this.outbox.enqueue({ type: 'receipt.send', tenantId, payload: { orderId } });
+    return { success: true, message: 'Receipt queued for delivery' };
+  }
 
   async list(tenantId: string, query: ListReceiptsQuery) {
     const where: Prisma.ReceiptWhereInput = { tenantId };
@@ -66,12 +92,12 @@ export class ReceiptsService {
     const receiptNumber = `RCP-${order.orderNumber}`;
     const data = buildReceiptData({
       receiptNumber,
-      business: { name: order.tenant.name, phone: order.tenant.phone, currency: order.tenant.currency },
+      business: { name: order.tenant.name, phone: order.tenant.phone ? decryptPii(order.tenant.phone) : null, currency: order.tenant.currency },
       customer: {
-        name: order.customerName,
-        phone: order.customerPhone,
-        email: order.customerEmail,
-        deliveryLocation: order.deliveryLocation,
+        name: decryptPii(order.customerName),
+        phone: decryptPii(order.customerPhone),
+        email: decryptPii(order.customerEmail),
+        deliveryLocation: decryptPii(order.deliveryLocation),
       },
       order: {
         id: order.id,

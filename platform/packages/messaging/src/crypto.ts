@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto';
 
 // AES-256-GCM for secrets at rest (per-tenant Meta access tokens / verify tokens).
 // Format: `v1.<iv-b64>.<tag-b64>.<ciphertext-b64>`. Key from ENCRYPTION_KEY
@@ -15,11 +15,31 @@ export class DecryptionError extends Error {
   }
 }
 
+function keyFrom(raw: string): Buffer {
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
+  return createHash('sha256').update(raw).digest();
+}
+
+/** The active key used for new encryption. */
 function getKey(): Buffer {
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) throw new DecryptionError('ENCRYPTION_KEY is not set — cannot encrypt/decrypt secrets.', 'no_key');
-  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
-  return createHash('sha256').update(raw).digest();
+  return keyFrom(raw);
+}
+
+/**
+ * Decrypt-only fallback keys, for rotation. Set `ENCRYPTION_KEYS_PREVIOUS` to a
+ * comma-separated list of the old secrets; new data is written with the active
+ * `ENCRYPTION_KEY`, and existing data still decrypts until it is re-encrypted.
+ */
+function getKeyCandidates(): Buffer[] {
+  const keys = [getKey()];
+  const previous = (process.env.ENCRYPTION_KEYS_PREVIOUS ?? '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean);
+  for (const raw of previous) keys.push(keyFrom(raw));
+  return keys;
 }
 
 export function encrypt(plain: string): string {
@@ -48,21 +68,24 @@ export function decrypt(payload: string): string {
   if (parts.length !== 4 || parts[0] !== 'v1') {
     throw new DecryptionError('Stored secret is not in the expected v1 envelope format.', 'malformed');
   }
-  try {
-    const iv = Buffer.from(parts[1], 'base64');
-    const tag = Buffer.from(parts[2], 'base64');
-    const ct = Buffer.from(parts[3], 'base64');
-    const decipher = createDecipheriv('aes-256-gcm', getKey(), iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
-  } catch (err) {
-    if (err instanceof DecryptionError) throw err;
-    // GCM auth failure: wrong key, or the ciphertext was tampered with.
-    throw new DecryptionError(
-      'Stored secret failed authentication — ENCRYPTION_KEY does not match the key used to encrypt it.',
-      'key_mismatch'
-    );
+  const iv = Buffer.from(parts[1], 'base64');
+  const tag = Buffer.from(parts[2], 'base64');
+  const ct = Buffer.from(parts[3], 'base64');
+  // Try the active key, then any rotation fallbacks.
+  for (const key of getKeyCandidates()) {
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(tag);
+      return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
+    } catch {
+      // try the next key
+    }
   }
+  // GCM auth failure on every candidate: wrong key, or the ciphertext was tampered with.
+  throw new DecryptionError(
+    'Stored secret failed authentication — ENCRYPTION_KEY does not match the key used to encrypt it.',
+    'key_mismatch'
+  );
 }
 
 /**
@@ -80,6 +103,18 @@ export function tryDecrypt(payload: string): { value: string | null; error: Decr
 
 export function isEncrypted(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('v1.');
+}
+
+/**
+ * Keyed HMAC blind index for equality lookups on encrypted PII. Deterministic,
+ * one-way, and domain-separated by a dedicated key (falls back to
+ * ENCRYPTION_KEY). Shared by the API and worker so indexes always agree.
+ */
+export function blindIndex(value: string): string {
+  const secret = process.env.PII_INDEX_KEY || process.env.ENCRYPTION_KEY || '';
+  if (!secret) throw new Error('PII_INDEX_KEY (or ENCRYPTION_KEY) is required for blind indexes');
+  const key = createHmac('sha256', secret).update('pii-index-v1').digest();
+  return createHmac('sha256', key).update(value.trim().toLowerCase()).digest('hex');
 }
 
 export function sha256(value: string): string {

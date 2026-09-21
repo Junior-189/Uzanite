@@ -69,6 +69,7 @@ enum StockReason {
   order_rejected
   order_deleted
   order_restored
+  refund
 }
 
 // ── Commerce (Phase M4) ──────────────────────────────────────────────────────
@@ -180,8 +181,9 @@ model Tenant {
   slug        String       @unique @db.Citext
   legacyId    String?      @unique @map("legacy_id")
   name        String
-  status      TenantStatus @default(pending)
-  currency    String       @default("TZS") @db.Char(3)
+  status          TenantStatus @default(pending)
+  rejectionReason String       @default("") @map("rejection_reason")
+  currency        String       @default("TZS") @db.Char(3)
   timezone    String       @default("Africa/Dar_es_Salaam")
   phone       String?
   country     String       @default("TZ") @db.Char(2)
@@ -216,6 +218,7 @@ model Tenant {
 
   notifications Notification[]
   receipts      Receipt[]
+  storedFiles   StoredFile[]
 
   whatsappAccounts   WhatsAppAccount[]
   whatsappTemplates  WhatsAppTemplate[]
@@ -224,6 +227,11 @@ model Tenant {
   webhookEvents      WebhookEvent[]
   conversations      Conversation[]
   flowTraces         FlowTrace[]
+  staff              Staff[]
+  broadcastLogs      BroadcastLog[]
+  expenses           Expense[]
+  purchases          Purchase[]
+  debts              Debt[]
 
   privacyRequests PrivacyRequest[]
 
@@ -258,7 +266,9 @@ model TenantPaymentMethod {
 // ── Identity ─────────────────────────────────────────────────────────────────
 model User {
   id                 String        @id @db.Uuid
-  email              String        @unique @db.Citext
+  email              String
+  // Blind index (HMAC) for equality lookup on the encrypted email.
+  emailIdx           String?       @unique @map("email_idx")
   legacyId           String?       @unique @map("legacy_id")
   passwordHash       String?       @map("password_hash")
   name               String
@@ -266,17 +276,24 @@ model User {
   avatarUrl          String?       @map("avatar_url")
   authProvider       String        @default("local") @map("auth_provider")
   platformRole       PlatformRole? @map("platform_role")
+  // Granular permissions for platform sub-admins (legacy `SUB_ADMIN_PERMISSIONS`).
+  permissions        String[]      @default([])
   status             UserStatus    @default(active)
   tokenVersion       Int           @default(0) @map("token_version")
   mustChangePassword Boolean       @default(false) @map("must_change_password")
+  theme              String        @default("light")
   emailVerifiedAt    DateTime?     @map("email_verified_at")
+  // TOTP two-factor auth (Phase M14). The secret is AES-256-GCM encrypted;
+  // recovery codes are stored as SHA-256 hashes and consumed on use.
+  totpSecretEnc      String?       @map("totp_secret_enc")
+  totpEnabledAt      DateTime?     @map("totp_enabled_at")
+  totpRecoveryHashes String[]      @default([]) @map("totp_recovery_hashes")
   lastLoginAt        DateTime?     @map("last_login_at")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
   deletedAt          DateTime?     @map("deleted_at")
 
   memberships    Membership[]
-  refreshTokens  RefreshToken[]
   resetTokens    PasswordResetToken[]
   loginAttempts  LoginAttempt[]
   identityAliases IdentityAlias[]
@@ -307,7 +324,9 @@ model Membership {
 model MembershipInvite {
   id          String         @id @db.Uuid
   tenantId    String         @map("tenant_id") @db.Uuid
-  email       String         @db.Citext
+  email       String
+  // Blind index (HMAC) for equality lookup on the encrypted invite email.
+  emailIdx    String?        @map("email_idx")
   role        MembershipRole
   permissions String[]       @default([])
   tokenHash   String         @unique @map("token_hash")
@@ -319,24 +338,26 @@ model MembershipInvite {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
-  @@index([email])
+  @@index([tenantId, emailIdx])
   @@map("membership_invites")
 }
 
+// Polymorphic refresh tokens: `principalId` is a User id or a Staff id, keyed by
+// `principalType`. Deliberately NOT an FK, so staff (which are not Users) can
+// hold refresh sessions; revocation is explicit (revokeAllForUser / logout).
 model RefreshToken {
-  id         String    @id @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  tokenHash  String    @unique @map("token_hash")
-  expiresAt  DateTime  @map("expires_at")
-  revokedAt  DateTime? @map("revoked_at")
-  replacedBy String?   @map("replaced_by")
-  ip         String?
-  userAgent  String?   @map("user_agent")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  id            String    @id @db.Uuid
+  principalId   String    @map("user_id") @db.Uuid
+  principalType String    @default("user") @map("principal_type")
+  tokenHash     String    @unique @map("token_hash")
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  replacedBy    String?   @map("replaced_by")
+  ip            String?
+  userAgent     String?   @map("user_agent")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
+  @@index([principalId])
   @@map("refresh_tokens")
 }
 
@@ -355,7 +376,9 @@ model PasswordResetToken {
 
 model LoginAttempt {
   id        BigInt   @id @default(autoincrement())
-  email     String?  @db.Citext
+  email     String?
+  // Blind index (HMAC) for equality lookup on the encrypted email.
+  emailIdx  String?  @map("email_idx")
   userId    String?  @map("user_id") @db.Uuid
   status    String
   reason    String?
@@ -369,7 +392,7 @@ model LoginAttempt {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
-  @@index([email])
+  @@index([emailIdx])
   @@map("login_attempts")
 }
 
@@ -556,6 +579,8 @@ model Order {
   // allowed by PostgreSQL, so the composite unique below stays partial in effect.
   clientRef          String?     @map("client_ref")
   customerPhone      String      @default("") @map("customer_phone")
+  // Blind index (HMAC) for equality lookups on the encrypted phone.
+  customerPhoneIdx   String?     @map("customer_phone_idx")
   customerName       String      @default("Customer") @map("customer_name")
   customerEmail      String      @default("") @map("customer_email")
   deliveryLocation   String      @default("") @map("delivery_location")
@@ -593,7 +618,7 @@ model Order {
   @@unique([tenantId, orderNumber])
   @@unique([tenantId, clientRef])
   @@index([tenantId, status, createdAt])
-  @@index([tenantId, customerPhone, createdAt])
+  @@index([tenantId, customerPhoneIdx])
   @@index([tenantId, deletedAt, id])
   @@index([tenantId, createdAt])
   @@map("orders")
@@ -686,6 +711,7 @@ model Payment {
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, orderId, createdAt])
+  @@index([tenantId, id])
   @@map("payments")
 }
 
@@ -731,6 +757,7 @@ model LedgerEntry {
   @@index([tenantId, createdAt])
   @@index([tenantId, type, createdAt])
   @@index([tenantId, refType, refId])
+  @@index([tenantId, id])
   @@map("ledger_entries")
 }
 
@@ -878,7 +905,30 @@ model Receipt {
   @@index([tenantId, createdAt])
   @@index([tenantId, orderId])
   @@index([tenantId, paymentId])
+  @@index([tenantId, id])
   @@map("receipts")
+}
+
+// Private file metadata (Phase M15 / Batch F). Bytes live in local/S3 storage;
+// this row is the tenant-scoped record used to authorize signed downloads. The
+// `key` is opaque and globally unique.
+model StoredFile {
+  id           String    @id @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  key          String    @unique
+  originalName String    @map("original_name")
+  contentType  String    @map("content_type")
+  size         Int
+  purpose      String    @default("other")
+  recordedBy   String    @default("") @map("recorded_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, purpose])
+  @@map("stored_files")
 }
 
 // ── Messaging (Phase M7) ─────────────────────────────────────────────────────
@@ -933,6 +983,8 @@ model WhatsAppContact {
   id            String    @id @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid
   phone         String
+  // Blind index (HMAC) for equality lookups on the encrypted phone.
+  phoneIdx      String?   @map("phone_idx")
   jid           String    @default("")
   name          String    @default("")
   email         String    @default("")
@@ -944,17 +996,50 @@ model WhatsAppContact {
   // PDPA (Tanzania Personal Data Protection Act 2022) consent audit trail.
   consentAt     DateTime? @map("consent_at")
   consentSource String    @default("") @map("consent_source")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  deletedAt     DateTime? @map("deleted_at")
+  optInAt        DateTime? @map("opt_in_at")
+  unsubscribedAt DateTime? @map("unsubscribed_at")
+  isNotified     Boolean   @default(false) @map("is_notified")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   messages Message[]
 
-  @@unique([tenantId, phone])
+  @@unique([tenantId, phoneIdx])
   // Ordered to cover the compound keyset cursor (lastMessageAt DESC, id DESC).
   @@index([tenantId, lastMessageAt, id])
   @@map("whatsapp_contacts")
+}
+
+// Tenant-level staff accounts (legacy Express `Staff` model). Distinct from
+// `User`/`Membership`: staff log in with their own credentials and carry a
+// page-permission list, and their email is globally unique (login is by email
+// across tenants, mirroring the legacy behaviour).
+model Staff {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  name         String
+  email        String
+  // Blind index (HMAC) for equality lookup on the encrypted email.
+  emailIdx     String?   @unique @map("email_idx")
+  passwordHash String    @map("password_hash")
+  avatar       String    @default("")
+  role         String    @default("staff")
+  permissions  String[]  @default([])
+  status       String    @default("active")
+  createdBy    String?   @map("created_by") @db.Uuid
+  lastLogin    DateTime? @map("last_login")
+  // Incremented on password change to invalidate issued access tokens.
+  tokenVersion Int       @default(0) @map("token_version")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("staff")
 }
 
 // Inbound + outbound message history. Outbound rows double as the durable send
@@ -966,6 +1051,8 @@ model Message {
   contactId         String?          @map("contact_id") @db.Uuid
   direction         MessageDirection
   contactPhone      String           @map("contact_phone")
+  // Blind index (HMAC) for equality lookup on the encrypted contact phone.
+  contactPhoneIdx   String?          @map("contact_phone_idx")
   messageType       String           @default("text") @map("message_type")
   text              String           @default("")
   templateName      String?          @map("template_name")
@@ -989,10 +1076,11 @@ model Message {
   contact WhatsAppContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, idempotencyKey])
-  @@index([tenantId, contactPhone, createdAt])
-  @@index([tenantId, providerMessageId])
+  @@index([tenantId, contactPhoneIdx, createdAt])
+  @@unique([tenantId, providerMessageId])
   @@index([tenantId, status, availableAt])
   @@index([tenantId, createdAt])
+  @@index([tenantId, id])
   @@map("messages")
 }
 
@@ -1028,6 +1116,8 @@ model Conversation {
   lastInboundAt  DateTime? @map("last_inbound_at")
   lastOutboundAt DateTime? @map("last_outbound_at")
   lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  // Optimistic concurrency for concurrent inbound messages.
+  version        Int       @default(0)
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
@@ -1057,6 +1147,7 @@ model FlowTrace {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, contactPhone, createdAt])
+  @@index([tenantId, id])
   @@map("flow_traces")
 }
 
@@ -1079,5 +1170,107 @@ model PrivacyRequest {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, subjectRef, createdAt])
+  @@index([tenantId, id])
   @@map("privacy_requests")
+}
+
+// ── Finance ledgers (Phase M18) ──────────────────────────────────────────────
+// Legacy Express Expense / Purchase / Debt models, ported so Reports and the
+// dashboard have a platform-resident source of truth.
+
+model Expense {
+  id          String   @id @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  description String
+  amount      Decimal  @db.Decimal(14, 2)
+  category    String   @default("Other")
+  recordedBy  String   @default("Owner") @map("recorded_by")
+  clientRef   String?  @map("client_ref")
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, clientRef])
+  @@index([tenantId, date])
+  @@index([tenantId, id])
+  @@map("expenses")
+}
+
+model Purchase {
+  id             String    @id @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  productId      String?   @map("product_id") @db.Uuid
+  productName    String    @map("product_name")
+  quantity       Int
+  costPerUnit    Decimal   @map("cost_per_unit") @db.Decimal(14, 2)
+  totalCost      Decimal   @map("total_cost") @db.Decimal(14, 2)
+  supplier       String    @default("")
+  recordedBy     String    @default("Owner") @map("recorded_by")
+  expiryDate     DateTime? @map("expiry_date")
+  expiryNotified String?   @map("expiry_notified")
+  date           DateTime  @default(now())
+  notes          String    @default("")
+  receiptKey     String?   @map("receipt_key")
+  clientRef      String?   @map("client_ref")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, clientRef])
+  @@index([tenantId, date])
+  @@index([tenantId, deletedAt, id])
+  @@map("purchases")
+}
+
+model Debt {
+  id            String    @id @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  customerName  String    @map("customer_name")
+  customerPhone String    @default("") @map("customer_phone")
+  amount        Decimal   @db.Decimal(14, 2)
+  paidAmount    Decimal   @default(0) @map("paid_amount") @db.Decimal(14, 2)
+  description   String    @default("")
+  dueDate       DateTime? @map("due_date")
+  status        String    @default("unpaid")
+  orderId       String?   @map("order_id") @db.Uuid
+  notes         String    @default("")
+  recordedBy    String    @default("Owner") @map("recorded_by")
+  clientRef     String?   @map("client_ref")
+  deletedAt     DateTime? @map("deleted_at")
+  deletedBy     String?   @map("deleted_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, clientRef])
+  @@index([tenantId, status])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, id])
+  @@map("debts")
+}
+
+// ── Broadcast (Phase M20) ─────────────────────────────────────────────────────
+// One row per broadcast fan-out; backs the legacy `/broadcast/sent` view.
+model BroadcastLog {
+  id         String   @id @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  subject    String   @default("")
+  body       String   @default("")
+  recipients String[] @default([])
+  count      Int      @default(0)
+  channel    String   @default("email")
+  sentAt     DateTime @default(now()) @map("sent_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sentAt])
+  @@map("broadcast_logs")
 }

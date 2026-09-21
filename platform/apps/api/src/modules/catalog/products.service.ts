@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AdjustStockInput,
@@ -9,14 +9,52 @@ import {
 } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StockService } from './stock.service';
+import { LocalStorageService } from '../../storage/local-storage.service';
+import { BillingService } from '../billing/billing.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
+
+/** Minimal RFC4180-ish CSV parser (quoted fields, CRLF, embedded commas). */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') {
+      row.push(field);
+      field = '';
+    } else if (c === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else if (c !== '\r') field += c;
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((v) => v.trim() !== ''));
+}
 
 @Injectable()
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly stock: StockService
+    private readonly stock: StockService,
+    private readonly storage: LocalStorageService,
+    // Optional so unit/integration constructions without entitlements still work.
+    private readonly billing?: BillingService
   ) {}
 
   private async getOrThrow(tenantId: string, id: string) {
@@ -25,15 +63,28 @@ export class ProductsService {
     return product;
   }
 
+  /**
+   * Legacy-compatible product envelope: the old client keys products by `_id`
+   * and renders `imagePath` with `imgUrl()`. Platform rows use `id` + `imageKey`,
+   * so alias them and hand back a freshly signed, expiring download URL.
+   */
+  private serialize<T extends { id: string; imageKey?: string | null }>(product: T) {
+    return {
+      ...product,
+      _id: product.id,
+      imagePath: product.imageKey ? this.storage.url(product.imageKey) : null,
+    };
+  }
+
   async get(tenantId: string, id: string) {
     const product = await this.getOrThrow(tenantId, id);
-    return { success: true, product };
+    return { success: true, product: this.serialize(product) };
   }
 
   async getByBarcode(tenantId: string, barcode: string) {
     const product = await this.prisma.db.product.findFirst({ where: { tenantId, barcode, deletedAt: null } });
     if (!product) throw new NotFoundException('Product not found for this barcode');
-    return { success: true, product };
+    return { success: true, product: this.serialize(product) };
   }
 
   /**
@@ -69,11 +120,97 @@ export class ProductsService {
       limit: query.limit,
       cursor: query.cursor ?? null,
     });
-    return { success: true, count: page.items.length, products: page.items, nextCursor: page.nextCursor };
+    return {
+      success: true,
+      count: page.items.length,
+      products: page.items.map((p) => this.serialize(p as { id: string; imageKey?: string | null })),
+      nextCursor: page.nextCursor,
+    };
   }
 
-  async create(tenantId: string, input: CreateProductInput, recordedBy: string) {
+  /**
+   * Bulk import from CSV (legacy `/products/bulk`). Accepts the legacy column
+   * aliases (name|product_name, price|unit_price, stock|quantity|qty, …) and
+   * returns per-row errors for anything invalid.
+   */
+  async bulkImportCsv(tenantId: string, buffer: Buffer, recordedBy: string) {
+    const rows = parseCsv(buffer.toString('utf8'));
+    const errors: Array<{ row: number; error: string }> = [];
+    if (rows.length < 2) return { success: true, created: 0, skipped: 0, errors, message: 'No rows found' };
+    // Bound a single import and reserve the entitlement for the whole batch.
+    const MAX_IMPORT_ROWS = 1000;
+    if (rows.length - 1 > MAX_IMPORT_ROWS) {
+      throw new BadRequestException(`A single import is limited to ${MAX_IMPORT_ROWS} rows`);
+    }
+    await this.billing?.assertLimit(tenantId, 'products', rows.length - 1);
+
+    const header = rows[0].map((h) => h.trim().toLowerCase());
+    const col = (...aliases: string[]) => {
+      const i = aliases.map((a) => header.indexOf(a)).find((x) => x >= 0);
+      return i === undefined ? -1 : i;
+    };
+    const nameIdx = col('name', 'product_name', 'product name');
+    const priceIdx = col('price', 'unit_price', 'unit price');
+    const descIdx = col('description', 'desc');
+    const currencyIdx = col('currency');
+    const stockIdx = col('stock', 'quantity', 'qty');
+
+    let created = 0;
+    let skipped = 0;
+    for (let r = 1; r < rows.length; r++) {
+      const cells = rows[r];
+      const val = (i: number) => (i >= 0 ? (cells[i] ?? '').trim() : '');
+      const name = val(nameIdx);
+      const priceRaw = val(priceIdx);
+      if (!name || priceRaw === '') {
+        errors.push({ row: r + 1, error: 'Missing required fields: name and price' });
+        skipped++;
+        continue;
+      }
+      const price = Number(priceRaw);
+      if (!Number.isFinite(price) || price < 0) {
+        errors.push({ row: r + 1, error: 'Invalid price' });
+        skipped++;
+        continue;
+      }
+      const stockRaw = val(stockIdx);
+      const stock = stockRaw === '' ? 0 : Number(stockRaw);
+      if (!Number.isFinite(stock) || stock < 0) {
+        errors.push({ row: r + 1, error: 'Invalid stock (must be >= 0)' });
+        skipped++;
+        continue;
+      }
+      try {
+        await this.create(
+          tenantId,
+          { name, description: val(descIdx), price, currency: val(currencyIdx) || 'TZS', stock } as never,
+          recordedBy
+        );
+        created++;
+      } catch (e) {
+        errors.push({ row: r + 1, error: (e as Error).message });
+        skipped++;
+      }
+    }
+    return { success: true, created, skipped, errors, message: `Imported ${created} product(s), skipped ${skipped}.` };
+  }
+
+  private async storeImage(tenantId: string, file: { buffer: Buffer; originalname?: string }): Promise<string> {
+    const ext = (file.originalname?.split('.').pop() || 'bin').toLowerCase();
+    const key = LocalStorageService.newKey(tenantId, ext);
+    await this.storage.put(key, file.buffer);
+    return key;
+  }
+
+  async create(
+    tenantId: string,
+    input: CreateProductInput,
+    recordedBy: string,
+    image?: { buffer: Buffer; originalname?: string }
+  ) {
+    await this.billing?.assertLimit(tenantId, 'products');
     const initialStock = input.stock ?? 0;
+    const imageKey = image ? await this.storeImage(tenantId, image) : input.imageKey ? input.imageKey : null;
     let productId: string;
     try {
       productId = await this.prisma.transaction(async () => {
@@ -92,9 +229,10 @@ export class ProductsService {
             lowStockThreshold: input.lowStockThreshold ?? 5,
             expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
             expiryWarnDays: input.expiryWarnDays ?? 7,
-            imageKey: input.imageKey ? input.imageKey : null,
+            imageKey,
             categoryId: await this.resolveCategoryId(tenantId, input.categoryId),
-            recordedBy: input.recordedBy || recordedBy,
+            // The actor is server-derived; a client-supplied `recordedBy` is ignored.
+            recordedBy,
           },
         });
         // Initial stock is recorded as an append-only movement in the same tx.
@@ -212,7 +350,11 @@ export class ProductsService {
       dedupeKey: input.clientRef ? `product:${id}:adjust:${input.clientRef}` : undefined,
       recordedBy,
     });
-    return { success: true, applied: result.applied, product: result.product };
+    return {
+      success: true,
+      applied: result.applied,
+      product: this.serialize(result.product as { id: string; imageKey?: string | null }),
+    };
   }
 
   async movements(tenantId: string, productId: string, limit = 50, cursor?: string) {

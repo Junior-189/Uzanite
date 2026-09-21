@@ -47,8 +47,16 @@ export default function BarcodeScanner({ onScan, onClose }) {
       setError(t('scanner.not_supported'));
       return;
     }
+    let lastDetect = 0;
     const detect = async () => {
       if (!activeRef.current || !videoRef.current || foundRef.current) return;
+      // Throttle detection to ~3/s so low-end phones are not pegged every frame.
+      const now = performance.now();
+      if (now - lastDetect < 300) {
+        animRef.current = requestAnimationFrame(detect);
+        return;
+      }
+      lastDetect = now;
       if (videoRef.current.readyState < 2) {
         animRef.current = requestAnimationFrame(detect);
         return;

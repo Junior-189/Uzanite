@@ -1,17 +1,14 @@
 {
   "_locale": "en",
   "_name": "English",
-
   "language.select": "🌐 *Choose language / Chagua lugha*\n\n1️⃣  English\n2️⃣  Kiswahili\n\n_Reply with 1 or 2_",
   "language.selected": "✅ Language set to English. Let's get started! 🚀",
-
   "main_menu": "🏪 *Welcome to {businessName}!*\n\nWhat would you like to do?\n\n1️⃣  Browse Products\n2️⃣  View My Orders\n3️⃣  Track an Order\n4️⃣  Contact Us\n5️⃣  Change Language / Badilisha Lugha\n\n_Reply with a number (1-5)_",
   "main_menu.btn_browse": "Browse Products",
   "main_menu.btn_orders": "My Orders",
   "main_menu.btn_track": "Track Order",
   "main_menu.btn_contact": "Contact Us",
   "main_menu.btn_language": "Change Language",
-
   "cart.empty": "🛒 Your cart is empty.\n\nType *1* to browse products.",
   "cart.menu": "🛒 *Your Cart*\n\n{items}\n\n*Total: {currency} {total}*\n\n1️⃣  Checkout\n2️⃣  Add more items\n3️⃣  Clear cart\n0️⃣  Main menu",
   "cart.btn_checkout": "Checkout",
@@ -22,13 +19,11 @@
   "cart.added": "✅ *{name} x{qty}* added to cart!\n\n{cart_menu}",
   "cart.cleared": "🗑️ Cart cleared.\n\n{main_menu}",
   "cart.empty_checkout": "🛒 Your cart is empty. Browse products first.",
-
   "browse_products.title": "🛍️ *Available Products*\n\n{list}\n\nReply with the *product number* to view details.",
   "browse_products.btn_cart": "View Cart",
   "browse_products.btn_main_menu": "Main Menu",
   "browse_products.invalid": "❓ Please enter a number between 1 and {max}, or type *0* for main menu.",
   "browse_products.reply_prompt": "{list}\n\nReply with a product number.",
-
   "product_detail.title": "📦 *{name}*\n\n{description}\n\n💰 Price: *{currency} {price}*\n{stock_line}\nHow many would you like?\n_(Enter quantity or type *BACK* to go back)_",
   "product_detail.stock": "📦 Stock: {stock} available\n",
   "product_detail.stock_unlimited": "",
@@ -37,7 +32,6 @@
   "product_detail.out_of_stock": "❌ Only {stock} units available.",
   "product_detail.back": "BACK",
   "product_detail.no_description": "No description",
-
   "checkout.name_prompt": "📝 Please enter your *name* to confirm your order:",
   "checkout.name_invalid": "Please enter your full name (at least 2 characters).",
   "checkout.location_prompt": "📍 *Delivery Location*\n\nPlease enter your *delivery location/address* where we should send your order:",
@@ -50,28 +44,21 @@
   "checkout.offer_too_low": "Minimum acceptable total is {currency} {minTotal}. Please enter a higher amount.",
   "checkout.out_of_stock": "😔 *Sorry!*\n\nThe following items are currently *out of stock*:\n\n{items}\n\nWe have saved your request. You will be *notified automatically* when these items are back in stock! 🙏",
   "checkout.success": "🎉 *Order Placed!*\n\nOrder Number: *{orderNumber}*\nTotal: *{currency} {total}*\n\n📍 *Delivery:* {location}\n📱 *Contact:* {phone}\n\nWe'll review your order and get back to you shortly.\n\nType *TRACK {orderNumber}* to check status.",
-
   "payment.waiting": "💳 *Payment Reference Received!*\n\nReference: {ref}\nOrder: {orderNumber}\n\nYour payment reference has been saved. Please wait for admin to confirm your payment. You will be notified once confirmed.",
   "payment.confirmed": "✅ *Payment Confirmed!*\n\nReference: {ref}\nOrder: {orderNumber}\n\nYour payment has been confirmed. We'll start preparing your order.",
   "payment.cancelled": "❌ Payment confirmation cancelled. Please contact admin if you have any issues.",
-
   "my_orders.title": "📦 *Your Recent Orders*\n\n{list}\n\nType *TRACK <order number>* for full details.",
   "my_orders.empty": "📭 You have no orders yet.\n\n🛍️ *Available Products*\n\n{list}\n\nReply with a *product number* to view details.",
   "my_orders.line": "{i}. *{orderNumber}* — {status} — {currency} {total}",
-
   "track.prompt": "🔍 Enter your order number (e.g. ORD-20240101-0001):",
   "track.not_found": "❌ Order *{orderNumber}* not found.",
-
   "contact.title": "📞 *Contact Us*\n\nBusiness: {businessName}\nPhone: {phone}",
   "contact.phone": "N/A",
-
   "error.generic": "⚠️ Something went wrong. Please try again or type *MENU* to restart.",
   "error.product_not_found": "❌ Product not found.",
   "error.order_not_found": "❌ Order not found.",
-
   "global.btn_main_menu": "Main Menu",
   "global.footer": "Tap a button or type the number",
-
   "admin.help": "🛠️ *Admin Commands*\n\n*QUICK_ADD <name>|<desc>|<price>|<stock>* — add product\n   Example: QUICK_ADD iPhone 15|Latest phone|3500000|25\n\n*ORDERS* — view all pending orders\n*ORDERS APPROVED* — filter by status\n*APPROVE <order>* — approve an order\n*REJECT <order> <reason>* — reject an order\n*PAY <order>* — request payment from customer\n*CONFIRM_PAYMENT <order> <method> <ref>* — confirm payment\n*DELIVER <order> [note]* — mark as delivered\n*TRACK <order>* — view order details\n*PRODUCTS* — list all products\n*HELP* — show this menu",
   "admin.help_btn_orders": "View Orders",
   "admin.help_btn_products": "View Products",
@@ -104,7 +91,6 @@
   "admin.products_active": "✅",
   "admin.products_inactive": "❌",
   "admin.error": "❌ Error: {message}",
-
   "order.label_status": "Status",
   "order.label_customer": "Customer",
   "order.label_whatsapp": "WhatsApp",
@@ -115,13 +101,11 @@
   "order.label_date": "Date",
   "products.list_empty": "No products available right now.",
   "products.remaining": "({n} left)",
-
   "notify.admin_new_order": "🔔 *New Order Received!*\n\n📦 Order: *{orderNumber}*\n👤 Customer: {customer}\n📱 WhatsApp: {phone}\n{location_line}{contact_line}\n🛒 Items:\n{items}\n\n💰 *Total: {currency} {total}*\n\nReply with:\n✅ *APPROVE {orderNumber}* to approve\n❌ *REJECT {orderNumber} <reason>* to reject",
   "notify.admin_payment_proof": "💳 *Payment Proof Received*\n\nOrder: *{orderNumber}*\nCustomer: {customer}\nAmount: {currency} {total}\nReference: {ref}\n\nReply: *CONFIRM_PAYMENT {orderNumber} <method> <reference>*",
   "notify.admin_item_line": "  • {name} x{qty} — {currency} {subtotal}",
   "notify.admin_location_line": "📍 Delivery: {location}\n",
   "notify.admin_contact_line": "📞 Contact: {phone}\n",
-
   "notify.customer_order_received": "✅ *Order Placed Successfully!*\n\nYour order *{orderNumber}* has been received.\nWe'll notify you once it's reviewed.\n\nTotal: *{currency} {total}*\n\nType *TRACK {orderNumber}* to check status anytime.",
   "notify.customer_order_approved": "🎉 *Order Approved!*\n\nHi {customer}, your order *{orderNumber}* has been approved by {businessName}!\n\nAmount to pay: *{currency} {total}*\n\n{paymentInfo}\n\nAfter paying, send your *transaction reference number* here to confirm.",
   "notify.customer_order_rejected": "❌ *Order Update*\n\nSorry, your order *{orderNumber}* could not be processed.\n{reason}You can place a new order anytime — type *MENU* to start again.",
@@ -171,7 +155,6 @@
   "recycle_bin.tabs.tenants": "Tenants",
   "recycle_bin.deleted_on": "Deleted on",
   "recycle_bin.deleted_by": "Deleted by",
-
   "expenses.title": "Expenses",
   "expenses.desc": "Record and track your business expenses",
   "expenses.total": "Total Expenses",
@@ -203,7 +186,6 @@
   "expenses.saved": "Expense saved",
   "expenses.deleted": "Expense deleted",
   "expenses.loading": "Loading expenses...",
-
   "product.cost_label": "Cost Price",
   "product.cost_placeholder": "Enter cost price",
   "product.minprice_label": "Min Price (Bargaining)",
@@ -213,7 +195,6 @@
   "product.negotiable": "🤝 Price Negotiable (min: {currency} {min})",
   "product.profit_label": "Profit",
   "product.profit_tooltip": "Profit = Price - Cost",
-
   "order.delete": "Delete Order",
   "order.delete_confirm": "Delete this order?",
   "order.print_receipt": "Print Receipt",
@@ -236,7 +217,6 @@
   "order.receipt_download": "Download Receipt",
   "order.negotiated_label": "Negotiated Price",
   "order.negotiated_from": "(was",
-
   "dashboard.stats_sales": "Total Sales",
   "dashboard.stats_expenses": "Total Expenses",
   "dashboard.stats_profit": "Net Profit",
@@ -246,9 +226,7 @@
   "dashboard.period_weekly": "Weekly",
   "dashboard.period_monthly": "Monthly",
   "dashboard.period_annually": "Annually",
-
   "nav.stock": "Stock",
-
   "nav.debts": "Debts",
   "nav.purchases": "Purchases",
   "nav.staff": "Staff",
@@ -259,7 +237,6 @@
   "nav.facebook": "Facebook",
   "nav.offline_sms": "Offline SMS",
   "nav.coming_soon": "Coming soon",
-
   "debt.loading": "Loading debts...",
   "debt.title": "Debts",
   "debt.new": "New Debt",
@@ -296,7 +273,6 @@
   "debt.customer_name": "Customer Name",
   "debt.add": "Add Debt",
   "debt.edit": "Edit Debt",
-
   "purchase.loading": "Loading purchases...",
   "purchase.title": "Purchases",
   "purchase.new": "New Purchase",
@@ -331,7 +307,6 @@
   "debt.no_unpaid_phones": "No unpaid debts with phone numbers found",
   "debt.reminder_failed_no_phone": "Customer has no phone number",
   "debt.not_found": "Debt not found",
-
   "common.loading": "Loading...",
   "common.error": "Error",
   "common.success": "Success",
@@ -371,7 +346,6 @@
   "common.unknown": "Unknown",
   "common.offline": "Offline",
   "common.online": "Online",
-
   "sidebar.admin_panel": "Admin Panel",
   "sidebar.platform_admin": "Platform Admin",
   "sidebar.loading": "Loading...",
@@ -386,34 +360,27 @@
   "sidebar.settings": "Settings",
   "sidebar.toggle_language": "Toggle language",
   "notifications.view_all": "View all notifications",
-
   "confirm.title": "Are you sure?",
   "confirm.confirm": "Confirm",
   "confirm.cancel": "Cancel",
   "confirm.deleting": "Deleting...",
-
   "period.today": "Today",
   "period.week": "Week",
   "period.month": "Month",
   "period.year": "Year",
   "period.all_time": "All Time",
   "period.label": "Period:",
-
   "report_period.title": "Select Period",
-
   "layout.toggle_menu": "Toggle menu",
   "layout.impersonating": "You are impersonating ",
   "layout.exit": "Exit",
-
   "error_boundary.title": "Something went wrong",
   "error_boundary.message": "An unexpected error occurred",
   "error_boundary.reload": "Reload Page",
-
   "update.new_version": "New version available!",
   "update.tap_to_update": "Tap to update now.",
   "update.update": "Update",
   "update.dismiss": "Dismiss",
-
   "login.title_welcome": "Welcome Back",
   "login.subtitle": "Sign in to your admin dashboard",
   "login.title_register": "Registration Complete",
@@ -430,6 +397,13 @@
   "login.create_password": "Create a password",
   "login.signing_in": "Signing in...",
   "login.creating": "Creating...",
+  "login.mfa_title": "Two-factor authentication",
+  "login.mfa_prompt": "Enter the 6-digit code from your authenticator app.",
+  "login.mfa_code_label": "Authentication code",
+  "login.mfa_verify": "Verify",
+  "login.mfa_invalid": "Invalid authentication code",
+  "login.verifying": "Verifying...",
+  "login.back": "Back",
   "login.back_to_home": "Back to Home",
   "login.welcome_back": "Karibu Tena",
   "login.signin_tab": "Sign In",
@@ -452,7 +426,6 @@
   "login.pending_login_notice": "We will notify you when your account is approved. Please wait.",
   "login.ok_got_it": "OK, Got It",
   "login.min_8_chars": "Min 8 chars, mixed case + number + special",
-
   "change_password.title": "Set a new password",
   "change_password.subtitle": "You must change your password before continuing.",
   "change_password.current": "Current password",
@@ -461,15 +434,12 @@
   "change_password.rules": "At least 8 characters with uppercase, lowercase, number and special character.",
   "change_password.submit": "Update password",
   "change_password.mismatch": "Passwords do not match.",
-
   "login.forgot_password": "Forgot password?",
   "login.forgot_sent": "If that email exists, a reset link has been sent.",
   "login.forgot_need_email": "Enter your email address first.",
-
   "reset_password.title": "Reset your password",
   "reset_password.submit": "Reset password",
   "reset_password.invalid": "This reset link is invalid or has expired.",
-
   "privacy.title": "Privacy & data (PDPA)",
   "privacy.desc": "Export your business data or erase a customer's personal data on request.",
   "privacy.export_data": "Export data",
@@ -479,7 +449,6 @@
   "privacy.erase_phone_prompt": "Customer phone to erase (leave blank to use email)",
   "privacy.erase_email_prompt": "Customer email to erase",
   "privacy.erase_confirm": "This permanently removes the customer's data. Continue?",
-
   "settings.title": "Settings",
   "settings.subtitle": "Manage your preferences",
   "settings.account_info": "Account Information",
@@ -509,7 +478,6 @@
   "settings.connected": "Connected",
   "settings.disconnected": "Disconnected",
   "settings.not_configured": "Not Configured",
-
   "admin_panel.title": "Admin Panel",
   "admin_panel.subtitle": "Platform administration",
   "admin_panel.refresh": "Refresh",
@@ -584,7 +552,6 @@
   "admin_panel.confirmed_name_updated": "Name updated",
   "admin_panel.confirmed_email_updated": "Email updated",
   "admin_panel.failed_to_load": "Failed to load",
-
   "staff.title": "Staff Management",
   "staff.report": "Report",
   "staff.members_count": "{count} staff members",
@@ -632,7 +599,6 @@
   "staff.confirmed_staff_created": "Staff created",
   "staff.confirmed_password_reset": "Password reset",
   "staff.confirmed_status_changed": "Staff {status}",
-
   "orders.title": "Orders",
   "orders.collect_payment": "Collect payment",
   "orders.payment_provider": "Payment provider",
@@ -746,7 +712,6 @@
   "orders.confirmed_offline": "Cash order saved offline — will sync when online",
   "orders.confirmed_receipt_sent": "Receipt sent to customer via WhatsApp",
   "orders.failed_receipt_send": "Failed to send receipt",
-
   "products.title": "Products",
   "products.offline": "Offline",
   "products.count": "{count} products",
@@ -818,7 +783,6 @@
   "products.confirmed_created": "Product created",
   "products.confirmed_offline": "Product saved offline — will sync when online",
   "products.failed_save": "Failed",
-
   "dashboard.loading": "Loading dashboard...",
   "dashboard.no_data": "No data for this period",
   "dashboard.min": "Min:",
@@ -871,7 +835,6 @@
   "dashboard.btn_products": "Products",
   "dashboard.btn_report": "Report",
   "dashboard.label_dashboard": "Dashboard",
-
   "contacts.title": "Contacts",
   "contacts.offline": "Offline",
   "contacts.count": "{count} contacts ({optedIn} opted in)",
@@ -912,7 +875,6 @@
   "contacts.confirmed_added": "Contact added",
   "contacts.confirmed_offline": "Contact saved offline",
   "contacts.failed": "Failed",
-
   "notifications.title": "Notifications",
   "notifications.unread": "{count} notifications ({unread} unread)",
   "notifications.download_report": "Download Report",
@@ -928,7 +890,6 @@
   "notifications.confirm_clear": "Clear all notifications?",
   "notifications.confirmed_cleared": "Cleared",
   "notifications.confirmed_read": "All marked as read",
-
   "broadcast.title": "Email",
   "broadcast.desc": "Send messages to all contacts",
   "broadcast.sent_title": "Sent",
@@ -972,7 +933,6 @@
   "broadcast.import_invalid_json": "Invalid JSON format",
   "broadcast.import_confirm": "Import {count} email contact(s)?",
   "broadcast.import_preview_count": "{count} valid email(s) ready to import",
-
   "business.title": "Business",
   "business.settings": "Business Settings",
   "business.edit_business": "Edit Business",
@@ -988,7 +948,6 @@
   "business.failed_to_load": "Failed to load business",
   "business.confirmed_updated": "Business updated",
   "business.failed_update": "Failed to update",
-
   "whatsapp.title": "WhatsApp",
   "common.saving": "Saving...",
   "common.load_more": "Load more",
@@ -1046,7 +1005,6 @@
   "whatsapp.bot_paused": "Auto-reply bot paused",
   "whatsapp.bot_resumed": "Auto-reply bot resumed",
   "whatsapp.bot_paused_short": "Bot Paused",
-
   "recycle_bin.report": "Download Report",
   "recycle_bin.name_number": "Name/Number",
   "recycle_bin.details": "Details",
@@ -1056,7 +1014,6 @@
   "recycle_bin.confirm_permanent": "Permanently delete?",
   "recycle_bin.confirmed_restored": "Restored",
   "recycle_bin.confirmed_deleted": "Deleted",
-
   "activity.title": "Activity & Login Log",
   "activity.subtitle": "Track site visitors, page navigation, and login attempts",
   "activity.total_visits": "Total Visits",
@@ -1092,7 +1049,6 @@
   "activity.prev": "Prev",
   "activity.next": "Next",
   "activity.page": "Page",
-
   "expenses.report": "Report",
   "expenses.records_total": "records — Total: {total}",
   "expenses.stat_total_spent": "Total Spent",
@@ -1103,7 +1059,6 @@
   "expenses.confirmed_deleted": "Deleted",
   "expenses.confirmed_updated": "Expense updated",
   "expenses.confirmed_added": "Expense added",
-
   "purchases.report": "Report",
   "purchases.purchases_total": "purchases — Total: {total}",
   "purchases.stat_total_spent": "Total Spent",
@@ -1121,7 +1076,6 @@
   "purchases.confirmed_updated": "Purchase updated",
   "purchases.confirmed_recorded": "Purchase recorded",
   "purchases.confirmed_deleted": "Deleted",
-
   "debts.title": "Debts",
   "debts.report": "Report",
   "debts.unpaid_total": "Unpaid: {total}",
@@ -1163,7 +1117,6 @@
   "debts.failed_reminder": "Failed to send reminder",
   "debts.confirmed_reminders_sent": "Reminders sent",
   "debts.failed_to_load": "Failed to load debts",
-
   "landing.nav_features": "Features",
   "landing.nav_how_it_works": "How It Works",
   "landing.nav_pricing": "Pricing",
@@ -1297,7 +1250,6 @@
   "landing.footer_rights": "All rights reserved.",
   "landing.footer_features": "Features",
   "landing.footer_pricing": "Pricing",
-
   "api.not_authorized": "Not authorized",
   "api.token_failed": "Authorization failed",
   "api.staff_not_found": "Staff not found",
@@ -1408,7 +1360,6 @@
   "api.debt_reminders_sent": "Debt reminders sent",
   "api.items_restored": "Items restored",
   "api.items_deleted": "Items permanently deleted",
-
   "landing.brand_name": "UZANITE",
   "landing.footer_api": "API",
   "landing.aria_twitter": "Twitter",
@@ -1454,8 +1405,8 @@
   "scanner.restock_button": "Restock",
   "scanner.restocked": "Stock updated successfully",
   "scanner.camera_permission": "Camera permission denied. Please enable it in settings.",
-    "scanner.camera_error": "Could not access camera",
-    "scanner.not_supported": "Barcode scanning is not supported on this device or browser.",
+  "scanner.camera_error": "Could not access camera",
+  "scanner.not_supported": "Barcode scanning is not supported on this device or browser.",
   "scanner.point_camera": "Point at a barcode",
   "scanner.hold_steady": "Hold steady and align barcode within the frame",
   "pos.title": "Scan & Build Order",
@@ -1547,5 +1498,19 @@
   "theme.desc": "Choose how UZANITE looks. Your selection applies across the entire system for your account.",
   "theme.light": "Light",
   "theme.dark": "Dark",
-  "theme.saved": "Theme updated"
+  "theme.saved": "Theme updated",
+  "approval.waiting_title": "Waiting for approval",
+  "approval.waiting_desc": "Please wait for an administrator to approve your account.",
+  "approval.whatsapp_title": "WhatsApp verification",
+  "approval.whatsapp_desc": "Connect your WhatsApp to continue.",
+  "nav.dashboard": "Dashboard",
+  "nav.orders": "Orders",
+  "nav.products": "Products",
+  "nav.expenses": "Expenses",
+  "nav.reports": "Reports",
+  "nav.business": "Settings",
+  "nav.adminPanel": "Admin Panel",
+  "nav.activityLog": "Activity Log",
+  "nav.recycleBin": "Recycle Bin",
+  "nav.notifications": "Notifications"
 }

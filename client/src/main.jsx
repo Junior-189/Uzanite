@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import '@fortawesome/fontawesome-free/css/all.min.css'
 import './index.css'
 import { startSyncListener } from './db/sync'
 
@@ -12,10 +13,11 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register(swPath).then((reg) => {
       const checkForUpdate = () => reg.update().catch(() => {});
 
-      // Check for updates every 60 seconds
-      setInterval(checkForUpdate, 60_000);
+      // Check for a new build occasionally rather than every minute: a 60s poll
+      // spends the user's mobile data for a deploy that happens once a week.
+      // 6 hours, plus an immediate check when the app regains focus.
+      setInterval(checkForUpdate, 6 * 60 * 60 * 1000);
 
-      // Check when page regains visibility (user returns to tab)
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') checkForUpdate();
       });
@@ -25,7 +27,7 @@ if ('serviceWorker' in navigator) {
         if (newWorker) {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // Auto-activate new SW immediately
+              // Activate the new worker; the app surfaces a reload prompt.
               newWorker.postMessage({ type: 'SKIP_WAITING' });
               window.dispatchEvent(new CustomEvent('sw-update', { detail: { registration: reg } }));
             }

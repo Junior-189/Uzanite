@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   adjustStockSchema,
@@ -30,16 +31,19 @@ export class ProductsController {
     return principal.name || principal.userId;
   }
 
+  @RequirePermission('products')
   @Get()
   list(@TenantId() tenantId: string, @Query(new ZodValidationPipe(listProductsQuery)) query: unknown) {
     return this.products.list(tenantId, query as never);
   }
 
+  @RequirePermission('products')
   @Get('barcode/:code')
   byBarcode(@TenantId() tenantId: string, @Param('code') code: string) {
     return this.products.getByBarcode(tenantId, code);
   }
 
+  @RequirePermission('products')
   @Get(':id/movements')
   movements(
     @TenantId() tenantId: string,
@@ -50,20 +54,35 @@ export class ProductsController {
     return this.products.movements(tenantId, params.id, limit ? Number(limit) : 50, cursor);
   }
 
+  @RequirePermission('products')
   @Get(':id')
   get(@TenantId() tenantId: string, @Param(new ZodValidationPipe(productIdParam)) params: { id: string }) {
     return this.products.get(tenantId, params.id);
   }
 
+  @Post('bulk')
+  @RequirePermission('products')
+  @UseInterceptors(FileInterceptor('file'))
+  bulkImport(
+    @TenantId() tenantId: string,
+    @CurrentUser() principal: Principal,
+    @UploadedFile() file?: { buffer: Buffer }
+  ) {
+    if (!file) throw new BadRequestException('CSV file is required');
+    return this.products.bulkImportCsv(tenantId, file.buffer, this.recordedBy(principal));
+  }
+
   @Post()
   @RequirePermission('products')
   @EnforceLimit('products')
+  @UseInterceptors(FileInterceptor('image'))
   create(
     @TenantId() tenantId: string,
     @CurrentUser() principal: Principal,
-    @Body(new ZodValidationPipe(createProductSchema)) body: unknown
+    @Body(new ZodValidationPipe(createProductSchema)) body: unknown,
+    @UploadedFile() image?: { buffer: Buffer; originalname?: string }
   ) {
-    return this.products.create(tenantId, body as never, this.recordedBy(principal));
+    return this.products.create(tenantId, body as never, this.recordedBy(principal), image);
   }
 
   @Put(':id')

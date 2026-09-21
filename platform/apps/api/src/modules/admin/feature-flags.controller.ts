@@ -1,13 +1,12 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
-  featureFlagIdParam,
-  listFeatureFlagsQuery,
-  upsertFeatureFlagSchema,
-  type ListFeatureFlagsQuery,
-  type UpsertFeatureFlagInput,
+  featureFlagsTenantParam,
+  featureFlagsTenantQuery,
+  featureFlagsUpdateSchema,
 } from '@uzanite/contracts';
 import { CurrentUser } from '../../decorators/principal.decorator';
+import { AdminMfaGuard } from '../../guards/admin-mfa.guard';
 import { RateLimit } from '../../decorators/rate-limit.decorator';
 import { Principal } from '../../context/tenant-context';
 import { ZodValidationPipe } from '../../pipes/zod-validation.pipe';
@@ -24,30 +23,49 @@ function assertPlatformAdmin(principal: Principal): void {
 export class FeatureFlagsController {
   constructor(private readonly flags: FeatureFlagsService) {}
 
+  // Tenant-facing: effective flags for the caller's own tenant.
+  @Get('me')
+  async me(@CurrentUser() principal: Principal) {
+    if (!principal?.tenantId) return { success: true, flags: {} };
+    return { success: true, flags: await this.flags.effectiveWithMessages(principal.tenantId) };
+  }
+
+  // Admin: global flags (+ tenant overrides when `tenantId` is supplied).
+  @UseGuards(AdminMfaGuard)
   @Get()
-  list(
-    @CurrentUser() principal: Principal,
-    @Query(new ZodValidationPipe(listFeatureFlagsQuery)) query: ListFeatureFlagsQuery
-  ) {
+  list(@CurrentUser() principal: Principal, @Query(new ZodValidationPipe(featureFlagsTenantQuery)) query: { tenantId?: string }) {
     assertPlatformAdmin(principal);
-    return this.flags.list(query);
+    return this.flags.listForAdmin(query.tenantId);
   }
 
-  @Post()
-  upsert(
+  @UseGuards(AdminMfaGuard)
+  @Put()
+  updateGlobal(
     @CurrentUser() principal: Principal,
-    @Body(new ZodValidationPipe(upsertFeatureFlagSchema)) body: UpsertFeatureFlagInput
+    @Body(new ZodValidationPipe(featureFlagsUpdateSchema)) body: unknown
   ) {
     assertPlatformAdmin(principal);
-    return this.flags.upsert(body);
+    return this.flags.updateGlobal(body as never);
   }
 
-  @Delete(':id')
-  remove(
+  @UseGuards(AdminMfaGuard)
+  @Put(':tenantId')
+  updateTenant(
     @CurrentUser() principal: Principal,
-    @Param(new ZodValidationPipe(featureFlagIdParam)) params: { id: string }
+    @Param(new ZodValidationPipe(featureFlagsTenantParam)) params: { tenantId: string },
+    @Body(new ZodValidationPipe(featureFlagsUpdateSchema)) body: unknown
   ) {
     assertPlatformAdmin(principal);
-    return this.flags.remove(params.id);
+    return this.flags.updateTenant(params.tenantId, body as never);
+  }
+
+  @UseGuards(AdminMfaGuard)
+  @Delete(':tenantId')
+  resetTenant(
+    @CurrentUser() principal: Principal,
+    @Param(new ZodValidationPipe(featureFlagsTenantParam)) params: { tenantId: string }
+  ) {
+    assertPlatformAdmin(principal);
+    return this.flags.resetTenant(params.tenantId);
   }
 }

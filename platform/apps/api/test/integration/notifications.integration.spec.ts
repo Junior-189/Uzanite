@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ReceiptsService } from '../../src/modules/receipts/receipts.service';
+import { ReceiptPdfService } from '../../src/modules/receipts/receipt-pdf.service';
 import { runWithRequest } from '../../src/context/tenant-context';
 
 const d = hasDb ? describe : describe.skip;
@@ -15,7 +16,7 @@ d('notifications & receipts integration (Postgres)', () => {
   beforeAll(async () => {
     h = await createHarness();
     notifications = new NotificationsService(h.prisma);
-    receipts = new ReceiptsService(h.prisma);
+    receipts = new ReceiptsService(h.prisma, new ReceiptPdfService(), h.outbox);
   });
   afterAll(async () => {
     if (h) await h.prisma.onModuleDestroy();
@@ -141,6 +142,21 @@ d('notifications & receipts integration (Postgres)', () => {
     expect(html).toContain('ORD-RCP-1');
     expect(html).toContain('Soda');
     expect(html).toContain('3,000.00');
+  });
+
+  it('renders an order receipt as a PDF and queues delivery', async () => {
+    const { tenantId } = await seedTenant('rcp-pdf');
+    const orderId = await seedOrder(tenantId, 'ORD-RCP-PDF');
+
+    const pdf = await withTenant(tenantId, () => receipts.pdfForOrder(tenantId, orderId));
+    expect(Buffer.isBuffer(pdf)).toBe(true);
+    expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(pdf.length).toBeGreaterThan(1000);
+
+    const sent = await withTenant(tenantId, () => receipts.sendReceipt(tenantId, orderId));
+    expect(sent.success).toBe(true);
+    const event = await h.prisma.base.outboxEvent.findFirst({ where: { tenantId, type: 'receipt.send' } });
+    expect(event).toBeTruthy();
   });
 
   it('isolates receipts between tenants', async () => {

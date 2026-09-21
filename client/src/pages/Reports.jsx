@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
 import PeriodFilter from '../components/PeriodFilter';
 import { getAccessToken } from '../utils/tokenStore';
+import { resolveApiUrl } from '../utils/apiRouting';
 import { rowActivate } from '../utils/rowActivate';
 
 const reports = [
@@ -42,6 +43,7 @@ function triggerCsvDownload(url, filename) {
   xhr.open('GET', url, true);
   xhr.setRequestHeader('Authorization', 'Bearer ' + (getAccessToken() || ''));
   xhr.responseType = 'blob';
+  xhr.timeout = 60000;
   xhr.onload = function () {
     if (xhr.status === 200) {
       const blob = new Blob([xhr.response], { type: 'text/csv;charset=utf-8' });
@@ -52,6 +54,7 @@ function triggerCsvDownload(url, filename) {
       URL.revokeObjectURL(link.href);
     }
   };
+  xhr.onerror = xhr.ontimeout = function () { /* surfaced by the page's toast on retry */ };
   xhr.send();
 }
 
@@ -60,6 +63,7 @@ function triggerPdfDownload(url, filename) {
   xhr.open('GET', url, true);
   xhr.setRequestHeader('Authorization', 'Bearer ' + (getAccessToken() || ''));
   xhr.responseType = 'blob';
+  xhr.timeout = 60000;
   xhr.onload = function () {
     if (xhr.status === 200) {
       const blob = new Blob([xhr.response], { type: 'application/pdf' });
@@ -151,12 +155,12 @@ export default function Reports() {
     const params = buildParams(rangeType, lang);
     setDownloading(key);
     if (format === 'csv') {
-      triggerCsvDownload(`/api/reports/${endpoint}/csv?${params}`, `${baseName}.csv`);
-      addRecent({ key, label, format, period: rangeType, csvData: null });
+      triggerCsvDownload(resolveApiUrl(`/reports/${endpoint}/csv?${params}`), `${baseName}.csv`);
+      addRecent({ key, label, format, period: rangeType, date: Date.now(), csvData: null });
       setTimeout(() => setDownloading(null), 1200);
     } else {
-      triggerPdfDownload(`/api/reports/${endpoint}?${params}`, `${baseName}.pdf`);
-      addRecent({ key, label, format, period: rangeType, csvData: null });
+      triggerPdfDownload(resolveApiUrl(`/reports/${endpoint}?${params}`), `${baseName}.pdf`);
+      addRecent({ key, label, format, period: rangeType, date: Date.now(), csvData: null });
       setTimeout(() => setDownloading(null), 1200);
     }
   };
@@ -166,10 +170,10 @@ export default function Reports() {
     const endpoint = entry.key === 'full' ? 'full' : entry.key;
     const baseName = entry.key === 'full' ? 'full-report' : entry.key + '-report';
     if (entry.format === 'csv') {
-      triggerCsvDownload(`/api/reports/${endpoint}/csv?${params}`, `${baseName}.csv`);
+      triggerCsvDownload(resolveApiUrl(`/reports/${endpoint}/csv?${params}`), `${baseName}.csv`);
       return;
     }
-    triggerPdfDownload(`/api/reports/${endpoint}?${params}`, `${baseName}.pdf`);
+    triggerPdfDownload(resolveApiUrl(`/reports/${endpoint}?${params}`), `${baseName}.pdf`);
   };
 
   const formatBtn = (fmt, label) => (
@@ -236,7 +240,7 @@ export default function Reports() {
             return (
               <div
                 key={report.key}
-                onClick={() => setPreview(report)}
+                {...rowActivate(() => setPreview(report), { label })}
                 className="group flex items-center gap-4 p-5 bg-white rounded-2xl border border-gray-100 hover:border-emerald-200 hover:shadow-lg transition-all duration-200 cursor-pointer"
               >
                 <div className={`w-12 h-12 rounded-xl ${report.softBg} ${report.softText} flex items-center justify-center text-lg flex-shrink-0`}>
@@ -268,7 +272,7 @@ export default function Reports() {
               {recent.map((entry, idx) => {
                 const conf = reports.find((r) => r.key === entry.key) || { icon: 'fa-layer-group', softBg: 'bg-emerald-50', softText: 'text-emerald-600', labelKey: 'reports.full_label', labelSw: 'Ripoti Kamili' };
                 const label = entry.label || (isSw ? conf.labelSw : t(conf.labelKey));
-                const date = new Date(entry.date);
+                const date = entry.date ? new Date(entry.date) : null;
                 return (
                   <div key={idx} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
                     <div className={`w-9 h-9 rounded-lg ${conf.softBg} ${conf.softText} flex items-center justify-center text-sm flex-shrink-0`}>
@@ -277,7 +281,7 @@ export default function Reports() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-900 truncate">{label}</p>
                       <p className="text-xs text-gray-400">
-                        {date.toLocaleDateString(isSw ? 'sw-TZ' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {entry.format.toUpperCase()}
+                        {date ? date.toLocaleDateString(isSw ? 'sw-TZ' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} · {entry.format.toUpperCase()}
                       </p>
                     </div>
                     <button

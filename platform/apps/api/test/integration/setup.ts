@@ -1,9 +1,13 @@
 import { ConfigService } from '@nestjs/config';
 import { PLAN_CATALOGUE } from '@uzanite/contracts';
 import { JwtService } from '@nestjs/jwt';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { RedisService } from '../../src/redis/redis.service';
 import { TokenService } from '../../src/security/token.service';
+import { JwtKeyService } from '../../src/security/jwt-keys.service';
+import { TotpService } from '../../src/security/totp.service';
 import { LockoutService } from '../../src/security/lockout.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
 import { AuthService } from '../../src/modules/identity/auth.service';
@@ -43,6 +47,9 @@ process.env.JWT_ACCESS_TTL = process.env.JWT_ACCESS_TTL || '15m';
 process.env.JWT_REFRESH_TTL_DAYS = process.env.JWT_REFRESH_TTL_DAYS || '30';
 process.env.APP_URL = process.env.APP_URL || 'http://localhost:4000';
 process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-encryption-key-0123456789abcdef0123456789abcdef';
+process.env.STORAGE_SIGNING_SECRET = process.env.STORAGE_SIGNING_SECRET || 'test-storage-signing-secret-0123456789abcdef';
+// Write test uploads to the OS temp dir, never inside the repository.
+process.env.STORAGE_LOCAL_DIR = process.env.STORAGE_LOCAL_DIR || join(tmpdir(), 'uzanite-test-storage');
 
 export interface Harness {
   prisma: PrismaService;
@@ -54,6 +61,9 @@ export interface Harness {
   metrics: MetricsService;
   /** Entitlement service wired with the same cache the app uses. */
   billing: BillingService;
+  tokens: TokenService;
+  lockout: LockoutService;
+  outbox: OutboxService;
 }
 
 export async function createHarness(): Promise<Harness> {
@@ -62,10 +72,12 @@ export async function createHarness(): Promise<Harness> {
   await prisma.onModuleInit();
   const redis = new RedisService(config);
   const jwt = new JwtService({ secret: process.env.JWT_SECRET as string });
-  const tokens = new TokenService(jwt, prisma, config);
+  const keys = new JwtKeyService(config, jwt);
+  const tokens = new TokenService(jwt, prisma, config, keys);
+  const totp = new TotpService(prisma);
   const lockout = new LockoutService(redis);
   const outbox = new OutboxService(prisma);
-  const auth = new AuthService(prisma, tokens, lockout, outbox, config);
+  const auth = new AuthService(prisma, tokens, lockout, outbox, config, totp);
 
   // Shared infrastructure, built once here so specs never have to know each
   // service's constructor signature.
@@ -74,7 +86,7 @@ export async function createHarness(): Promise<Harness> {
   const uow = new UnitOfWorkService(prisma);
   const billing = new BillingService(prisma, uow, cache, config);
 
-  return { prisma, auth, redis, config, uow, cache, metrics, billing };
+  return { prisma, auth, redis, config, uow, cache, metrics, billing, tokens, lockout, outbox };
 }
 
 /**
@@ -93,7 +105,7 @@ export async function createHarness(): Promise<Harness> {
  * suite unreliable.
  */
 export async function resetDb(prisma: PrismaService): Promise<void> {
-  await truncateWithRetry((sql) => prisma.base.$executeRawUnsafe(sql), 'TRUNCATE "outbox_events","activity_logs","feature_flags","usage_counters","subscriptions","tenant_payment_methods","tenant_settings","memberships","membership_invites","refresh_tokens","password_reset_tokens","login_attempts","flow_traces","conversations","webhook_events","messages","whatsapp_contacts","whatsapp_templates","whatsapp_accounts","receipts","notifications","refunds","journal_lines","journal_entries","ledger_entries","payment_attempts","payments","order_status_history","order_items","orders","order_counters","stock_movements","products","categories","privacy_requests","identity_aliases","users","tenants" RESTART IDENTITY CASCADE');
+  await truncateWithRetry((sql) => prisma.base.$executeRawUnsafe(sql), 'TRUNCATE "outbox_events","activity_logs","feature_flags","usage_counters","subscriptions","tenant_payment_methods","tenant_settings","memberships","membership_invites","refresh_tokens","password_reset_tokens","login_attempts","flow_traces","conversations","webhook_events","messages","whatsapp_contacts","whatsapp_templates","whatsapp_accounts","receipts","notifications","refunds","journal_lines","journal_entries","ledger_entries","payment_attempts","payments","order_status_history","order_items","orders","order_counters","stock_movements","products","categories","privacy_requests","stored_files","identity_aliases","staff","broadcast_logs","debts","purchases","expenses","users","tenants" RESTART IDENTITY CASCADE');
   // Seed the real plan catalogue: empty limits/features used to make every
   // entitlement test vacuously pass, which is how the plan-limit bugs survived.
   for (const plan of PLAN_CATALOGUE) {

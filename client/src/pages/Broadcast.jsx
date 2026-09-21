@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -209,7 +210,7 @@ function ComposeTab({ t }) {
 
   const handleSend = async () => {
     if (!message.trim()) return;
-    if (!confirm(t('broadcast.confirm_send', { count }))) return;
+    if (!(await confirmDialog(t('broadcast.confirm_send', { count })))) return;
     setSending(true);
     try {
       const res = await api.post('/broadcast/send', { message, channel: 'email', subject });

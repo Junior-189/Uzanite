@@ -12,12 +12,13 @@ import { WhatsAppService } from '../messaging/whatsapp.service';
 import { InboundDescriptor } from '../messaging/whatsapp-webhook.service';
 import { runAsSystem } from '../../context/tenant-context';
 import { newId } from '../../ids/id';
+import { decryptPii } from '../../security/pii';
 import { handleCustomerFlow } from './flows/customer-flow';
 import { handleAdminFlow } from './flows/admin-flow';
 import { t } from './flows/i18n';
 import { ActionResult, CartItem, CreateOrderInput, FlowDeps, FlowResult, FlowState, OrderView, ProductView, Reply, STEPS } from './flows/types';
 
-type ConversationRow = { id: string; step: string; language: string; cart: unknown; context: unknown; lastActivityAt: Date };
+type ConversationRow = { id: string; step: string; language: string; cart: unknown; context: unknown; lastActivityAt: Date; version: number };
 
 // Sessions idle for longer than this are reset (mirrors the legacy 2h TTL).
 const INACTIVITY_MS = 2 * 60 * 60 * 1000;
@@ -53,7 +54,7 @@ export class ConversationService {
         }
 
         const paused = !!account?.botPaused;
-        const { state, conversationId, reset } = await this.loadState(ev.tenantId, ev.phone);
+        const { state, conversationId, version, reset } = await this.loadState(ev.tenantId, ev.phone);
         if (reset) this.logger.log(`conversation reset after inactivity tenant=${ev.tenantId} phone=${ev.phone}`);
 
         const deps = await this.buildDeps(ev, state);
@@ -68,7 +69,7 @@ export class ConversationService {
         }
 
         const stepTo = result.step ?? state.step;
-        await this.persistState(ev.tenantId, ev.phone, state, result);
+        await this.persistState(ev.tenantId, ev.phone, state, result, version);
         await this.recordTrace({
           tenantId: ev.tenantId,
           conversationId,
@@ -144,14 +145,13 @@ export class ConversationService {
   }
 
   // ── State ────────────────────────────────────────────────────────────────────
-  private async loadState(tenantId: string, phone: string): Promise<{ state: FlowState; conversationId: string; reset: boolean }> {
-    let row = (await this.prisma.db.conversation.findFirst({ where: { tenantId, contactPhone: phone } })) as ConversationRow | null;
-    if (!row) {
-      const created = (await this.prisma.db.conversation.create({
-        data: { id: newId(), tenantId, contactPhone: phone, step: STEPS.LANGUAGE_SELECT, cart: [], context: {} },
-      })) as ConversationRow;
-      row = created;
-    }
+  private async loadState(tenantId: string, phone: string): Promise<{ state: FlowState; conversationId: string; version: number; reset: boolean }> {
+    // Upsert avoids the find-then-create race (P2002) on the first message.
+    let row = (await this.prisma.db.conversation.upsert({
+      where: { tenantId_contactPhone: { tenantId, contactPhone: phone } },
+      create: { id: newId(), tenantId, contactPhone: phone, step: STEPS.LANGUAGE_SELECT, cart: [], context: {} },
+      update: {},
+    })) as ConversationRow;
 
     let reset = false;
     if (Date.now() - new Date(row.lastActivityAt).getTime() > INACTIVITY_MS) {
@@ -165,6 +165,7 @@ export class ConversationService {
 
     return {
       conversationId: row.id,
+      version: row.version,
       reset,
       state: {
         tenantId,
@@ -177,18 +178,33 @@ export class ConversationService {
     };
   }
 
-  private async persistState(tenantId: string, phone: string, state: FlowState, result: FlowResult): Promise<void> {
-    await this.prisma.db.conversation.updateMany({
-      where: { tenantId, contactPhone: phone },
-      data: {
-        step: result.step ?? state.step,
-        language: result.language ?? state.language,
-        cart: (result.cart ?? state.cart) as unknown as Prisma.InputJsonValue,
-        context: (result.context ?? state.context) as unknown as Prisma.InputJsonValue,
-        lastActivityAt: new Date(),
-        lastOutboundAt: result.replies.length ? new Date() : undefined,
-      },
+  private async persistState(
+    tenantId: string,
+    phone: string,
+    state: FlowState,
+    result: FlowResult,
+    expectedVersion: number
+  ): Promise<void> {
+    const data = {
+      step: result.step ?? state.step,
+      language: result.language ?? state.language,
+      cart: (result.cart ?? state.cart) as unknown as Prisma.InputJsonValue,
+      context: (result.context ?? state.context) as unknown as Prisma.InputJsonValue,
+      lastActivityAt: new Date(),
+      lastOutboundAt: result.replies.length ? new Date() : undefined,
+      version: { increment: 1 },
+    };
+    // Optimistic concurrency: only persist if nobody else advanced the row.
+    const res = await this.prisma.db.conversation.updateMany({
+      where: { tenantId, contactPhone: phone, version: expectedVersion },
+      data,
     });
+    if (res.count === 0) {
+      // Lost a race with a concurrent inbound message. Re-read (last-writer-wins
+      // on the newest version) and apply once more so state is never dropped.
+      this.logger.warn(`Conversation state advanced concurrently for ${phone}; re-applying`);
+      await this.prisma.db.conversation.updateMany({ where: { tenantId, contactPhone: phone }, data });
+    }
   }
 
   private async recordTrace(input: {
@@ -275,7 +291,7 @@ export class ConversationService {
       status: o.status,
       currency: o.currency,
       total: Number(o.total),
-      customerName: o.customerName,
+      customerName: decryptPii(o.customerName),
       createdAt: o.createdAt.toISOString(),
       items: (o.items ?? []).map((i) => ({ productName: i.productName, quantity: i.quantity, subtotal: Number(i.subtotal) })),
     });

@@ -45,7 +45,7 @@
   --color-sidebar-hover: #1e293b;
   --color-sidebar-active: #11503a;
 
-  --font-serif: 'Playfair Display', 'Georgia', serif;
+  --font-serif: 'Georgia', 'Times New Roman', serif;
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
@@ -55,7 +55,7 @@ html {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--color-gray-50);
   color: var(--color-gray-900);
   line-height: 1.6;
@@ -446,3 +446,8 @@ body {
 [data-theme="dark"] textarea::placeholder { color: #64748b !important; }
 
 [data-theme="dark"] .bg-warning-500 { background-color: #b45309 !important; }
+
+/* Respect device safe areas (notches / gesture bars) on low-end Android/iOS. */
+:root { --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); }
+body { padding-bottom: var(--safe-bottom); }
+.safe-top { padding-top: var(--safe-top); }

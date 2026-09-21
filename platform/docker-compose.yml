@@ -103,6 +103,12 @@ services:
       TRUST_PROXY_HOPS: "1"
     ports:
       - "127.0.0.1:4000:4000"
+    # Persist signed private uploads (product images, payment proofs). The
+    # default STORAGE_LOCAL_DIR resolves against the app cwd (/app/apps/api).
+    # For multi-host or autoscaled API replicas, use shared object storage
+    # instead — a per-host volume is not shared across machines.
+    volumes:
+      - uploads:/app/apps/api/private_uploads_platform
     depends_on:
       postgres:
         condition: service_healthy
@@ -147,3 +153,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  uploads:

@@ -1,9 +1,12 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { resumeAudio } from '../utils/beep';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
+import { isRoutedToPlatform } from '../utils/apiRouting';
+import { uploadFile } from '../utils/files';
 import StatusBadge from '../components/StatusBadge';
 import StatCard from '../components/StatCard';
 import PeriodFilter from '../components/PeriodFilter';
@@ -93,11 +96,15 @@ export default function Orders() {
   };
 
   const doAction = async (id, action, body) => {
+    // State changes require the server; acting offline would silently diverge
+    // from money/stock. Refuse instead of reporting a false success.
+    if (!isOnline) {
+      showToast(t('common.requires_connection') || 'You are offline — reconnect to make changes', 'error');
+      return;
+    }
     setActionLoading(action + id);
     try {
-      if (isOnline) {
-        await apiAction(`/orders/${id}/${action}`, 'POST', body || {});
-      }
+      await apiAction(`/orders/${id}/${action}`, 'POST', body || {});
       showToast(`${action.replace('-', ' ')} success`, 'success');
       fetchOrders(true);
       api.get('/products').then(r => { if (r.success) setProducts(r.products || []); }).catch(() => {});
@@ -107,7 +114,7 @@ export default function Orders() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm(t('orders.confirm_delete'))) return;
+    if (!(await confirmDialog(t('orders.confirm_delete')))) return;
     try {
       await deleteOffline('orders', id);
       showToast(t('orders.confirmed_deleted'), 'success');
@@ -217,11 +224,23 @@ export default function Orders() {
     setPayLoading(true);
     try {
       if (payForm.provider === 'manual') {
-        const fd = new FormData();
-        fd.append('method', payForm.method);
-        fd.append('reference', payForm.reference || '');
-        if (payForm.proof) fd.append('proof', payForm.proof);
-        await api.post(`/payments/orders/${payTarget._id}/manual`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const manualPath = `/payments/orders/${payTarget._id}/manual`;
+        if (isRoutedToPlatform(manualPath)) {
+          // Platform: upload the proof first, then confirm by key (JSON).
+          let proofPath = null;
+          if (payForm.proof) proofPath = (await uploadFile(payForm.proof, 'payment_proof')).key;
+          await api.post(manualPath, {
+            method: payForm.method,
+            reference: payForm.reference || 'N/A',
+            proofPath,
+          });
+        } else {
+          const fd = new FormData();
+          fd.append('method', payForm.method);
+          fd.append('reference', payForm.reference || '');
+          if (payForm.proof) fd.append('proof', payForm.proof);
+          await api.post(manualPath, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
         showToast(t('orders.payment_confirmed'), 'success');
       } else {
         const res = await api.post(`/payments/orders/${payTarget._id}/initiate`, {

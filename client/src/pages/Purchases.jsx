@@ -1,7 +1,11 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect, useRef } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
+import { isRoutedToPlatform } from '../utils/apiRouting';
+import { uploadFile } from '../utils/files';
+import { useLoadMore } from '../hooks/useLoadMore';
 import { fetchFromCacheOrApi, createOffline, updateOffline, deleteOffline } from '../db/helpers';
 import useOnlineStatus from '../hooks/useOnlineStatus';
 import { imgUrl } from '../utils/imgUrl';
@@ -18,6 +22,9 @@ export default function Purchases() {
   const { isOnline } = useOnlineStatus();
   const API_URL = import.meta.env.VITE_API_URL || '/api';
   const [purchases, setPurchases] = useState([]);
+  const { nextCursor, setNextCursor, loadMore, loadingMore } = useLoadMore('purchases', (items) =>
+    setPurchases((prev) => [...prev, ...items])
+  );
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -47,7 +54,16 @@ export default function Purchases() {
   useEffect(() => { Promise.all([fetchPurchases(), fetchProducts()]).then(() => setLoading(false)); }, []);
 
   const fetchPurchases = async (forceRefresh = false) => {
-    try { const items = await fetchFromCacheOrApi('purchases', { forceRefresh }); setPurchases(items); } catch {}
+    try {
+      const items = await fetchFromCacheOrApi('purchases', { forceRefresh });
+      setPurchases(items);
+      if (isOnline) {
+        try {
+          const res = await api.get('/purchases', { params: { limit: 50 } });
+          if (res.success && Array.isArray(res.purchases)) { setPurchases(res.purchases); setNextCursor(res.nextCursor || null); }
+        } catch { /* keep cached */ }
+      }
+    } catch {}
   };
   const fetchProducts = async () => { try { const res = await api.get('/products'); if (res.success) setProducts(res.products || []); } catch {} };
 
@@ -63,7 +79,13 @@ export default function Purchases() {
         expiryDate: form.expiryDate || null,
       };
 
-      if (navigator.onLine) {
+      if (navigator.onLine && isRoutedToPlatform('/purchases')) {
+        const body = { ...payload, clientRef: crypto.randomUUID() };
+        if (receiptFile) body.receiptKey = (await uploadFile(receiptFile, 'other')).key;
+        const json = await api.post('/purchases', body);
+        if (!json.success) throw new Error(json.error || t('common.failed'));
+        showToast(editPurchase ? t('purchases.confirmed_updated') : t('purchases.confirmed_recorded'), 'success');
+      } else if (navigator.onLine) {
         const fd = new FormData();
         for (const [k, v] of Object.entries(payload)) {
           if (v !== undefined && v !== null) fd.append(k, String(v));
@@ -89,7 +111,7 @@ export default function Purchases() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm(t('purchase.delete_confirm'))) return;
+    if (!(await confirmDialog(t('purchase.delete_confirm')))) return;
     try { await deleteOffline('purchases', id); showToast(t('purchases.confirmed_deleted'), 'success'); fetchPurchases(true); } catch { showToast(t('common.failed'), 'error'); }
   };
 
@@ -106,7 +128,12 @@ export default function Purchases() {
     if (!file || !p) return;
     const id = p._id || p.id;
     try {
-      if (navigator.onLine) {
+      if (navigator.onLine && isRoutedToPlatform('/purchases')) {
+        const receiptKey = (await uploadFile(file, 'other')).key;
+        const json = await api.patch(`/purchases/${id}`, { receiptKey });
+        if (!json.success) throw new Error(json.error || t('common.failed'));
+        showToast(t('purchase.receipt_uploaded'), 'success');
+      } else if (navigator.onLine) {
         const fd = new FormData();
         fd.append('receipt', file);
         const token = getAccessToken();
@@ -124,10 +151,14 @@ export default function Purchases() {
   };
 
   const handleDeleteReceipt = async (p) => {
-    if (!confirm(t('purchase.delete_receipt_confirm'))) return;
+    if (!(await confirmDialog(t('purchase.delete_receipt_confirm')))) return;
     const id = p._id || p.id;
     try {
-      if (navigator.onLine) {
+      if (navigator.onLine && isRoutedToPlatform('/purchases')) {
+        const json = await api.patch(`/purchases/${id}`, { receiptKey: '' });
+        if (!json.success) throw new Error(json.error || t('common.failed'));
+        showToast(t('purchase.receipt_deleted'), 'success');
+      } else if (navigator.onLine) {
         const token = getAccessToken();
         const headers = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
         const res = await fetch(`${API_URL}/purchases/${id}`, {
@@ -381,6 +412,17 @@ export default function Purchases() {
           </button>
         )}
       />
+      {nextCursor && (
+        <div className="p-4 text-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-4 py-2 rounded-xl bg-white text-primary-700 border border-primary-200 text-sm font-semibold hover:bg-primary-50 disabled:opacity-50"
+          >
+            {loadingMore ? t('common.loading') : t('common.load_more')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

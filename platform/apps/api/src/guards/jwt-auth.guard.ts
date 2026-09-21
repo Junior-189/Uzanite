@@ -6,9 +6,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { JwtKeyService } from '../security/jwt-keys.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { IdentityResolverService } from '../modules/identity/identity-resolver.service';
 import { runAsSystem, setPrincipal, setTenant, Principal } from '../context/tenant-context';
@@ -25,12 +25,15 @@ interface AccessTokenPayload {
   perms?: string[];
   tv?: number;
   act?: string | null;
+  // Challenge tokens (e.g. the 2FA step-up) are short-lived and MUST NOT be
+  // accepted as access tokens. Access tokens never carry a `purpose`.
+  purpose?: string;
 }
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
-    private readonly jwt: JwtService,
+    private readonly keys: JwtKeyService,
     private readonly prisma: PrismaService,
     private readonly reflector: Reflector,
     private readonly identity: IdentityResolverService
@@ -50,9 +53,52 @@ export class JwtAuthGuard implements CanActivate {
 
     let payload: AccessTokenPayload;
     try {
-      payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
+      payload = await this.keys.verify<AccessTokenPayload>(token);
     } catch {
       throw new UnauthorizedException('Not authorized, token failed');
+    }
+
+    // A challenge token (currently only `purpose: 'mfa'`) proves a first factor
+    // but is not a session; the dedicated handler verifies it explicitly.
+    if (payload.purpose) {
+      throw new UnauthorizedException('Not authorized, token failed');
+    }
+
+    // Platform staff tokens carry `type: 'staff'` with a platform UUID subject
+    // and are not Users, so they build their principal from the staff row
+    // (tenant + page permissions) instead of a membership. Legacy Express staff
+    // tokens also use `type: 'staff'` but carry a Mongo ObjectId in `id` and no
+    // `sub`; those fall through to the identity resolver below.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (payload.type === 'staff' && typeof payload.sub === 'string' && UUID_RE.test(payload.sub)) {
+      const staffId = payload.sub;
+      const staff = await runAsSystem(() =>
+        this.prisma.db.staff.findFirst({
+          where: { id: staffId },
+          select: { id: true, name: true, tenantId: true, role: true, permissions: true, tokenVersion: true, status: true },
+        })
+      ).catch(() => null);
+      if (!staff) throw new UnauthorizedException('Not authorized, token failed');
+      if ((payload.tv ?? 0) !== staff.tokenVersion) {
+        throw new UnauthorizedException('Session expired. Please sign in again.');
+      }
+      if (staff.status !== 'active') throw new ForbiddenException('Account is inactive. Contact your manager.');
+
+      const principal: Principal = {
+        userId: staff.id,
+        name: staff.name ?? '',
+        platformRole: null,
+        tenantId: staff.tenantId,
+        membershipId: null,
+        role: 'staff',
+        permissions: staff.permissions ?? [],
+        tokenVersion: staff.tokenVersion,
+        impersonatedBy: null,
+      };
+      setPrincipal(principal);
+      setTenant(principal.tenantId);
+      (req as Request & { principal?: Principal }).principal = principal;
+      return true;
     }
 
     // C4: resolve a claim from EITHER system (platform UUID or legacy ObjectId)
@@ -100,6 +146,16 @@ export class JwtAuthGuard implements CanActivate {
       tokenVersion: user.tokenVersion,
       impersonatedBy: payload.act ?? null,
     };
+    // Impersonation is a read-only support view: an admin acting as a tenant
+    // may look, but must not mutate money/stock/records. Session management
+    // (refresh/logout) is exempt.
+    if (principal.impersonatedBy && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      const url = req.originalUrl ?? req.url ?? '';
+      if (!url.includes('/auth/refresh') && !url.includes('/auth/logout')) {
+        throw new ForbiddenException('Impersonation sessions are read-only');
+      }
+    }
+
     setPrincipal(principal);
     setTenant(principal.tenantId);
     (req as Request & { principal?: Principal }).principal = principal;

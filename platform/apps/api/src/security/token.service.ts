@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtKeyService } from './jwt-keys.service';
 import { newId } from '../ids/id';
 import { randomToken, sha256 } from '../crypto/crypto';
 
@@ -13,6 +14,8 @@ export interface AccessTokenClaims {
   permissions?: string[];
   tokenVersion: number;
   impersonatedBy?: string | null;
+  // 'staff' issues a tenant-staff principal (legacy Express `type: 'staff'`).
+  type?: string | null;
 }
 
 interface RefreshMeta {
@@ -25,7 +28,8 @@ export class TokenService {
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly keys: JwtKeyService
   ) {}
 
   private get refreshTtlMs(): number {
@@ -45,16 +49,37 @@ export class TokenService {
       perms: claims.permissions ?? [],
       tv: claims.tokenVersion,
       act: claims.impersonatedBy ?? null,
+      type: claims.type ?? null,
     };
-    return ttl ? this.jwt.signAsync(payload, { expiresIn: ttl }) : this.jwt.signAsync(payload);
+    return this.jwt.signAsync(payload, this.keys.signOptions(ttl));
   }
 
-  async issueRefresh(userId: string, meta: RefreshMeta = {}): Promise<string> {
+  // Short-lived challenge issued after a correct password when the account has
+  // TOTP enabled; exchanged (with a code) at POST /auth/login/2fa for real tokens.
+  signMfaChallenge(userId: string, tokenVersion: number): Promise<string> {
+    return this.jwt.signAsync(
+      { sub: userId, tv: tokenVersion, purpose: 'mfa' },
+      this.keys.signOptions('5m')
+    );
+  }
+
+  async verifyMfaChallenge(token: string): Promise<{ userId: string; tokenVersion: number } | null> {
+    try {
+      const payload = await this.keys.verify<{ sub?: string; tv?: number; purpose?: string }>(token);
+      if (payload.purpose !== 'mfa' || !payload.sub) return null;
+      return { userId: payload.sub, tokenVersion: payload.tv ?? 0 };
+    } catch {
+      return null;
+    }
+  }
+
+  async issueRefresh(userId: string, meta: RefreshMeta = {}, principalType = 'user'): Promise<string> {
     const raw = randomToken(48);
     await this.prisma.db.refreshToken.create({
       data: {
         id: newId(),
-        userId,
+        principalId: userId,
+        principalType,
         tokenHash: sha256(raw),
         expiresAt: new Date(Date.now() + this.refreshTtlMs),
         ip: meta.ip,
@@ -65,14 +90,17 @@ export class TokenService {
   }
 
   // Rotates a refresh token. Reuse of a revoked token revokes the whole family.
-  async rotateRefresh(raw: string, meta: RefreshMeta = {}): Promise<{ userId: string; refreshToken: string } | null> {
+  async rotateRefresh(
+    raw: string,
+    meta: RefreshMeta = {}
+  ): Promise<{ userId: string; principalType: string; refreshToken: string } | null> {
     const hash = sha256(raw);
     const existing = await this.prisma.db.refreshToken.findUnique({ where: { tokenHash: hash } });
     if (!existing) return null;
 
     if (existing.revokedAt) {
       await this.prisma.db.refreshToken.updateMany({
-        where: { userId: existing.userId, revokedAt: null },
+        where: { principalId: existing.principalId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
       return null;
@@ -81,21 +109,32 @@ export class TokenService {
 
     const newRaw = randomToken(48);
     const newHash = sha256(newRaw);
-    await this.prisma.db.refreshToken.update({
-      where: { id: existing.id },
+    // Compare-and-swap: only the request that revokes the current token wins the
+    // rotation. A concurrent second use sees count 0 and its whole family is
+    // revoked (treat as a leaked-token replay).
+    const claimed = await this.prisma.db.refreshToken.updateMany({
+      where: { id: existing.id, revokedAt: null },
       data: { revokedAt: new Date(), replacedBy: newHash },
     });
+    if (claimed.count === 0) {
+      await this.prisma.db.refreshToken.updateMany({
+        where: { principalId: existing.principalId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return null;
+    }
     await this.prisma.db.refreshToken.create({
       data: {
         id: newId(),
-        userId: existing.userId,
+        principalId: existing.principalId,
+        principalType: existing.principalType,
         tokenHash: newHash,
         expiresAt: new Date(Date.now() + this.refreshTtlMs),
         ip: meta.ip,
         userAgent: meta.userAgent,
       },
     });
-    return { userId: existing.userId, refreshToken: newRaw };
+    return { userId: existing.principalId, principalType: existing.principalType, refreshToken: newRaw };
   }
 
   async revoke(raw: string): Promise<void> {
@@ -107,7 +146,7 @@ export class TokenService {
 
   async revokeAllForUser(userId: string): Promise<void> {
     await this.prisma.db.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
+      where: { principalId: userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }

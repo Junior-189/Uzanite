@@ -1,7 +1,7 @@
 import db from './index';
 import { getAccessToken } from '../utils/tokenStore';
+import { resolveApiUrl } from '../utils/apiRouting';
 
-const API_URL = import.meta.env.VITE_API_URL || '/api';
 const MAX_RETRIES = 8;
 
 let isSyncing = false;
@@ -53,7 +53,7 @@ export async function processQueue() {
 
       try {
         const headers = await getAuthHeaders();
-        const url = `${API_URL}/${item.entity}${item.entityId && item.action !== 'create' ? '/' + item.entityId : ''}`;
+        const url = resolveApiUrl(`/${item.entity}${item.entityId && item.action !== 'create' ? '/' + item.entityId : ''}`);
 
         const method = item.action === 'create' ? 'POST'
           : item.action === 'update' ? (item.entity === 'purchases' ? 'PATCH' : 'PUT')

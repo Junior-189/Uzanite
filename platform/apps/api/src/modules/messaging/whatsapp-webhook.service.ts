@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { OutboxService } from '../../outbox/outbox.service';
 import { newId } from '../../ids/id';
+import { blindIndex, encryptPii } from '../../security/pii';
 import { runAsSystem } from '../../context/tenant-context';
 
 const STATUS_MAP: Record<string, 'sent' | 'delivered' | 'read' | 'failed'> = {
@@ -58,8 +59,11 @@ export class WhatsAppWebhookService {
   verifyChallenge(mode?: string, token?: string, challenge?: string): { ok: boolean; challenge?: string } {
     const expected = process.env.META_VERIFY_TOKEN;
     if (!expected) return { ok: false };
-    if (mode === 'subscribe' && token === expected) return { ok: true, challenge };
-    return { ok: false };
+    if (mode !== 'subscribe' || !token) return { ok: false };
+    const a = Buffer.from(token);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false };
+    return { ok: true, challenge };
   }
 
   verifySignature(rawBody: string | Buffer | undefined, header: string | undefined): boolean {
@@ -125,6 +129,15 @@ export class WhatsAppWebhookService {
     );
   }
 
+  /** Releases a dedupe claim so a failed flow can be re-driven on Meta retry. */
+  async release(eventId: string): Promise<void> {
+    try {
+      await this.prisma.db.webhookEvent.deleteMany({ where: { provider: 'meta', eventId } });
+    } catch {
+      /* best-effort: a stale claim only delays reprocessing */
+    }
+  }
+
   private async claim(eventId: string, tenantId: string, type: string, payload: unknown): Promise<boolean> {
     const res = await this.prisma.db.webhookEvent.createMany({
       data: [{ id: newId(), provider: 'meta', eventId, tenantId, type, payload: payload as object }],
@@ -142,16 +155,17 @@ export class WhatsAppWebhookService {
     const messageType = message.interactive ? 'interactive' : (message.type ?? 'text');
 
     const contact = await this.prisma.db.whatsAppContact.upsert({
-      where: { tenantId_phone: { tenantId, phone } },
-      update: { lastMessageAt: new Date(), lastMessage: text.slice(0, 200), messageCount: { increment: 1 } },
+      where: { tenantId_phoneIdx: { tenantId, phoneIdx: blindIndex(phone) } },
+      update: { lastMessageAt: new Date(), lastMessage: encryptPii(text.slice(0, 200)) ?? '', messageCount: { increment: 1 } },
       create: {
         id: newId(),
         tenantId,
-        phone,
+        phone: encryptPii(phone) ?? '',
+        phoneIdx: blindIndex(phone),
         jid: `${phone}@s.whatsapp.net`,
         messageCount: 1,
         lastMessageAt: new Date(),
-        lastMessage: text.slice(0, 200),
+        lastMessage: encryptPii(text.slice(0, 200)) ?? '',
       },
     });
 
@@ -160,16 +174,22 @@ export class WhatsAppWebhookService {
     const mediaMimeType =
       message.image?.mime_type ?? message.document?.mime_type ?? message.audio?.mime_type ?? message.video?.mime_type ?? null;
 
-    await this.prisma.db.message.create({
+    const existingMessage = await this.prisma.db.message.findFirst({
+      where: { tenantId, providerMessageId: message.id },
+      select: { id: true },
+    });
+    if (!existingMessage) {
+      await this.prisma.db.message.create({
       data: {
         id: newId(),
         tenantId,
         accountId,
         contactId: contact.id,
         direction: 'inbound',
-        contactPhone: phone,
+        contactPhone: encryptPii(phone) ?? '',
+        contactPhoneIdx: blindIndex(phone),
         messageType,
-        text,
+        text: encryptPii(text) ?? '',
         mediaId,
         mediaMimeType,
         providerMessageId: message.id,
@@ -178,7 +198,8 @@ export class WhatsAppWebhookService {
         sentAt: new Date(),
         statusUpdatedAt: new Date(),
       },
-    });
+      });
+    }
 
     await this.outbox.enqueue({
       type: 'whatsapp.inbound',

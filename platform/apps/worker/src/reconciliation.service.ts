@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
+import { workerPrisma } from './prisma-client';
+import { LeaderLock } from './leader-lock';
 import { NotificationWriter } from './consumers/notification-writer.service';
 
 /**
@@ -11,10 +13,11 @@ import { NotificationWriter } from './consumers/notification-writer.service';
 @Injectable()
 export class ReconciliationService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(ReconciliationService.name);
-  private readonly prisma = new PrismaClient();
+  private readonly prisma = workerPrisma;
   private readonly intervalMs: number;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private readonly lock: LeaderLock;
 
   constructor(
     config: ConfigService,
@@ -22,6 +25,7 @@ export class ReconciliationService implements OnApplicationBootstrap, OnApplicat
   ) {
     const configured = Number(config.get<string>('RECONCILE_INTERVAL_MS') ?? '');
     this.intervalMs = Number.isFinite(configured) && configured > 0 ? configured : 15 * 60 * 1000;
+    this.lock = new LeaderLock(config);
   }
 
   async onApplicationBootstrap(): Promise<void> {
@@ -34,6 +38,11 @@ export class ReconciliationService implements OnApplicationBootstrap, OnApplicat
   async runOnce(): Promise<{ unbalancedTenants: number; unbalancedJournals: number }> {
     if (this.running) return { unbalancedTenants: 0, unbalancedJournals: 0 };
     this.running = true;
+    const ttl = Math.max(60, Math.ceil(this.intervalMs / 1000) * 2);
+    if (!(await this.lock.acquire('reconciliation', ttl))) {
+      this.running = false;
+      return { unbalancedTenants: 0, unbalancedJournals: 0 };
+    }
     try {
       const rows = await this.prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', true)`;
@@ -73,12 +82,13 @@ export class ReconciliationService implements OnApplicationBootstrap, OnApplicat
       if (rows.length === 0) this.logger.debug('Ledger reconciliation OK (no unbalanced journals)');
       return { unbalancedTenants: rows.length, unbalancedJournals: journals };
     } finally {
+      await this.lock.release('reconciliation');
       this.running = false;
     }
   }
 
   async onApplicationShutdown(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
-    await this.prisma.$disconnect();
+    await this.lock.onModuleDestroy();
   }
 }

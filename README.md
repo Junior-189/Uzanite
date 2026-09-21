@@ -105,7 +105,6 @@ UZANITE is a **modular monolith (NestJS) with a separate worker process**, backe
 ├── docs/                      # Target-architecture alignment, Android signing
 ├── server.js, src/, tests/    # LEGACY (transitional): Express + MongoDB app, live system of record
 ├── scripts/                   # Legacy migrations/seeds + Mongo backup/restore
-├── electron/                  # Legacy desktop shell (planned to be dropped in favour of the PWA)
 ├── Dockerfile / docker-compose.yml / render.yaml
 └── .env.example               # Legacy env template (platform/ and client/ have their own)
 ```
@@ -165,7 +164,7 @@ npm run build                 # web build
 npm run build:mobile && npx cap sync android && npm run cap:build:debug
 ```
 
-> The client currently points at the legacy `/api`. The cutover to `/api/v1` is part of the migration plan.
+> The client still defaults to the legacy `/api`. A Strangler cutover flag (`VITE_API_V1`, default off) now routes the **auth** wave to `/api/v1` with a platform→legacy user/permission bridge and a parity harness (`platform/scripts/api-parity-check.mjs`); other domains follow once parity is green.
 
 ### 3. Legacy Express + MongoDB app (transitional)
 ```bash
@@ -198,8 +197,8 @@ At least 32 characters and non-placeholder secrets are enforced at boot on both 
 cd platform && bash scripts/ci-local.sh      # needs TEST_DATABASE_URL / TEST_APP_DATABASE_URL / SHADOW_DATABASE_URL / JWT_SECRET
 pnpm test                                    # tests only
 
-# Client
-cd client && npm test && npm run lint
+# Client (TypeScript is adopted incrementally; converted modules are checked)
+cd client && npm run typecheck && npm run lint && npm test
 
 # Legacy (transitional)
 npm test
@@ -251,7 +250,7 @@ Conversation rollout is controlled per tenant via `flow_mode` (`off` = legacy ow
 
 ## Security
 
-- **Authentication:** JWT access tokens + rotating refresh tokens with reuse detection and token-version revocation; bcrypt password hashing (**argon2id + admin TOTP 2FA are on the roadmap** — see the alignment doc).
+- **Authentication:** JWT access tokens + rotating refresh tokens with reuse detection and token-version revocation; **argon2id** password hashing with transparent upgrade of legacy hashes; **TOTP two-factor** (enforced for platform admins) with single-use recovery codes; **`kid`-based JWT key rotation** (`JWT_KEYS`).
 - **Tenant isolation:** application-level scoping (Prisma tenant extension) **plus** PostgreSQL **FORCE row-level security** with a non-owner, non-bypass DB role and a boot-time assertion.
 - **Input safety:** Zod validation everywhere, parameterised SQL only (a CI guard forbids unsafe raw SQL), regex inputs escaped (ReDoS), rate limiting on auth, APIs, webhooks, and metrics.
 - **Secrets & transport:** AES-256-GCM encryption for provider tokens, HMAC webhook verification, Helmet-equivalent security headers, strict CORS allow-list, placeholder-secret rejection at boot.

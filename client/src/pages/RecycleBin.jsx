@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -42,7 +43,7 @@ export default function RecycleBin() {
   };
 
   const handlePermanentDelete = async (type, id) => {
-    if (!confirm(t('recycle_bin.confirm_permanent'))) return;
+    if (!(await confirmDialog(t('recycle_bin.confirm_permanent')))) return;
     try {
       await api.delete(`/recycle-bin/${type}/${id}`);
       showToast(t('recycle_bin.confirmed_deleted'), 'success');

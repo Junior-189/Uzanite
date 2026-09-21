@@ -28,6 +28,7 @@ const envSchema = z.object({
   RETENTION_WEBHOOK_EVENT_DAYS: z.coerce.number().int().optional(),
   RETENTION_LOGIN_ATTEMPT_DAYS: z.coerce.number().int().optional(),
   RETENTION_ACTIVITY_LOG_DAYS: z.coerce.number().int().optional(),
+  RETENTION_MESSAGE_DAYS: z.coerce.number().int().optional().default(0),
   // Error reporting (optional; logged only when unset).
   SENTRY_DSN: z.string().optional().default(''),
   APP_RELEASE: z.string().optional().default('unknown'),

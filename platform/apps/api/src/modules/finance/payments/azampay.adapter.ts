@@ -9,19 +9,21 @@ function providerTimeoutMs(): number {
   return Number(process.env.PROVIDER_TIMEOUT_MS ?? 8000);
 }
 
-const cfg = {
+function cfg() {
+  return {
   appName: process.env.AZAMPAY_APP_NAME ?? '',
   clientId: process.env.AZAMPAY_CLIENT_ID ?? '',
   clientSecret: process.env.AZAMPAY_CLIENT_SECRET ?? '',
   baseUrl: process.env.AZAMPAY_BASE_URL ?? 'https://sandbox.azampay.co.tz',
   webhookSecret: process.env.AZAMPAY_WEBHOOK_SECRET ?? '',
 };
+}
 
 function verifySignature(rawBody: string | Buffer | undefined, headers: Record<string, unknown>): boolean {
-  if (!cfg.webhookSecret) return false;
+  if (!cfg().webhookSecret) return false;
   const provided = headers['x-azampay-signature'] ?? headers['x-signature'];
   if (!provided || !rawBody) return false;
-  const expected = createHmac('sha256', cfg.webhookSecret).update(rawBody).digest('hex');
+  const expected = createHmac('sha256', cfg().webhookSecret).update(rawBody).digest('hex');
   const a = Buffer.from(String(provided));
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
@@ -44,10 +46,10 @@ function parseWebhook(body: Record<string, unknown>): ParsedWebhook | null {
 async function getToken(): Promise<string> {
   // Auth is idempotent, so a single retry is safe and saves a failed payment.
   const res = await outboundRequest<{ data?: { accessToken?: string }; message?: string }>('azampay', 'auth', {
-    url: `${cfg.baseUrl.replace(/\/$/, '')}/AppRegistration/GenerateToken`,
+    url: `${cfg().baseUrl.replace(/\/$/, '')}/AppRegistration/GenerateToken`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: { appName: cfg.appName, clientId: cfg.clientId, clientSecret: cfg.clientSecret },
+    body: { appName: cfg().appName, clientId: cfg().clientId, clientSecret: cfg().clientSecret },
     timeoutMs: providerTimeoutMs(),
     retries: 1,
   });
@@ -60,7 +62,7 @@ async function initiate(ctx: InitiateContext): Promise<InitiateResult> {
   const token = await getToken();
   // retries: 0 — a checkout is not idempotent provider-side.
   const res = await outboundRequest<Record<string, unknown>>('azampay', 'initiate', {
-    url: `${cfg.baseUrl.replace(/\/$/, '')}/azampay/mno/checkout`,
+    url: `${cfg().baseUrl.replace(/\/$/, '')}/azampay/mno/checkout`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: {
@@ -84,7 +86,7 @@ async function initiate(ctx: InitiateContext): Promise<InitiateResult> {
 
 export const azampayAdapter: PaymentAdapter = {
   name: 'azampay',
-  enabled: () => !!(cfg.appName && cfg.clientId && cfg.clientSecret),
+  enabled: () => !!(cfg().appName && cfg().clientId && cfg().clientSecret),
   initiate,
   verifySignature,
   parseWebhook,

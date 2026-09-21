@@ -111,6 +111,27 @@ export class CacheService {
     await this.bumpGeneration(tenantId);
   }
 
+  /**
+   * Global generation for feature-flag resolution. A global flag change affects
+   * every tenant's resolved set and tenants cannot be enumerated cheaply, so a
+   * single counter re-keys all `flags:*` entries atomically.
+   */
+  async flagsGeneration(): Promise<string> {
+    try {
+      return (await this.redis.get('cachegen:flags')) ?? '0';
+    } catch {
+      return `bypass-${Date.now()}`;
+    }
+  }
+
+  async bumpFlagsGeneration(): Promise<void> {
+    try {
+      await this.redis.incr('cachegen:flags');
+    } catch (err) {
+      this.logger.warn(`Feature-flag cache generation bump failed: ${(err as Error).message}`);
+    }
+  }
+
   /** Invalidate a tenant's entitlement snapshot and all member entries. */
   async invalidateTenant(tenantId: string): Promise<void> {
     await this.del(`billing:status:${tenantId}`);

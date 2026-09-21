@@ -19,6 +19,9 @@ export const createProductSchema = z
     // categories in ProductsService, so it cannot reference another tenant's row.
     categoryId: uuid.optional().nullable(),
     recordedBy: z.string().trim().max(120).optional(),
+    // Offline-queue idempotency key (legacy client sends it). Products have no
+    // natural idempotency key, so it is accepted but not persisted.
+    clientRef: z.string().trim().max(120).optional().nullable(),
   })
   .strict();
 

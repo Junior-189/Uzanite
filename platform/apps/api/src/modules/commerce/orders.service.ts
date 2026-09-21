@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderSource, OrderStatus, Prisma } from '@prisma/client';
-import { CreateOrderInput, ListOrdersQuery } from '@uzanite/contracts';
+import { CreateOrderInput, isAllTimePeriod, ListOrdersQuery } from '@uzanite/contracts';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StockService } from '../catalog/stock.service';
 import { OutboxService } from '../../outbox/outbox.service';
@@ -8,6 +8,8 @@ import { BillingService } from '../billing/billing.service';
 import { LedgerService } from '../finance/ledger.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
+import { OrderIntakeService, ResolvedItem } from './order-intake.service';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 
 // ── State machine ────────────────────────────────────────────────────────────
 // PENDING → APPROVED → PENDING_PAYMENT → PAID → DELIVERED
@@ -22,19 +24,6 @@ const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   REJECTED: [],
 };
 
-interface ResolvedItem {
-  id: string;
-  productId: string | null;
-  legacyProductId: string | null;
-  productName: string;
-  price: number;
-  /** Floor price (product.minPrice) used to bound negotiated totals. */
-  minPrice: number;
-  currency: string;
-  quantity: number;
-  subtotal: number;
-}
-
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 
 const ORDER_INCLUDE = {
@@ -44,13 +33,18 @@ const ORDER_INCLUDE = {
 
 @Injectable()
 export class OrdersService {
+  // Intake (numbering + item pricing) is a separate concern.
+  private readonly intake: OrderIntakeService;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly stock: StockService,
     private readonly outbox: OutboxService,
     private readonly billing: BillingService,
     private readonly ledger: LedgerService
-  ) {}
+  ) {
+    this.intake = new OrderIntakeService(this.prisma);
+  }
 
   // ── Reads ──────────────────────────────────────────────────────────────────
   private async getOrThrow(tenantId: string, id: string, includeDeleted = false) {
@@ -63,8 +57,18 @@ export class OrdersService {
   }
 
   private serialize<T extends { id: string }>(order: T): T & { _id: string } {
-    // `_id` alias preserves compatibility with Express clients that key on it.
-    return { ...order, _id: order.id };
+    // `_id` alias preserves compatibility with Express clients that key on it;
+    // encrypted PII fields are decrypted for the response.
+    const row = order as T & { customerName?: string | null; customerPhone?: string | null; customerEmail?: string | null; deliveryLocation?: string | null; deliveryPhone?: string | null };
+    return {
+      ...order,
+      _id: order.id,
+      ...(row.customerName !== undefined ? { customerName: decryptPii(row.customerName) } : {}),
+      ...(row.customerPhone !== undefined ? { customerPhone: decryptPii(row.customerPhone) } : {}),
+      ...(row.customerEmail !== undefined ? { customerEmail: decryptPii(row.customerEmail) } : {}),
+      ...(row.deliveryLocation !== undefined ? { deliveryLocation: decryptPii(row.deliveryLocation) } : {}),
+      ...(row.deliveryPhone !== undefined ? { deliveryPhone: decryptPii(row.deliveryPhone) } : {}),
+    };
   }
 
   async get(tenantId: string, id: string) {
@@ -95,13 +99,13 @@ export class OrdersService {
     if (query.includeDeleted !== 'true') where.deletedAt = null;
     if (query.status) where.status = query.status;
     if (query.source) where.source = query.source;
-    if (query.customerPhone) where.customerPhone = query.customerPhone;
+    if (query.customerPhone) where.customerPhoneIdx = blindIndex(query.customerPhone);
     if (query.from || query.to) {
       where.createdAt = {};
       if (query.from) (where.createdAt as Prisma.DateTimeFilter).gte = new Date(query.from);
       if (query.to) (where.createdAt as Prisma.DateTimeFilter).lte = new Date(query.to);
-    } else if (query.period && query.period !== 'all') {
-      where.createdAt = { gte: this.periodStart(query.period) };
+    } else if (!isAllTimePeriod(query.period)) {
+      where.createdAt = { gte: this.periodStart(query.period as string) };
     }
 
     const page = await paginate<{ id: string }>({
@@ -124,78 +128,25 @@ export class OrdersService {
       start.setUTCDate(start.getUTCDate() - diff);
     } else if (period === 'monthly') {
       start.setUTCDate(1);
-    } else if (period === 'yearly') {
+    } else if (period === 'yearly' || period === 'annually') {
       start.setUTCMonth(0, 1);
     }
     return start;
   }
 
-  // ── Order number (race-free, per tenant per UTC day) ────────────────────────
-  private async nextOrderNumber(tenantId: string): Promise<string> {
-    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const rows = await this.prisma.db.$queryRaw<Array<{ seq: number }>>`
-      INSERT INTO "order_counters" ("tenant_id", "day", "seq")
-      VALUES (${tenantId}::uuid, ${day}, 1)
-      ON CONFLICT ("tenant_id", "day")
-      DO UPDATE SET "seq" = "order_counters"."seq" + 1
-      RETURNING "seq"
-    `;
-    const seq = Number(rows[0]?.seq ?? 1);
-    return `ORD-${day}-${String(seq).padStart(4, '0')}`;
-  }
-
-  // ── Item resolution (server-authoritative pricing) ──────────────────────────
-  private async resolveItems(tenantId: string, inputs: CreateOrderInput['items']): Promise<ResolvedItem[]> {
-    const resolved: ResolvedItem[] = [];
-    for (const input of inputs) {
-      let product: { id: string; name: string; price: unknown; minPrice: unknown; currency: string } | null = null;
-      if (input.productId) {
-        product = await this.prisma.db.product.findFirst({
-          where: { id: input.productId, tenantId, deletedAt: null },
-          select: { id: true, name: true, price: true, minPrice: true, currency: true },
-        });
-        if (!product) throw new NotFoundException(`Product ${input.productId} not found`);
-      }
-
-      const listPrice = product ? round2(Number(product.price)) : undefined;
-      const floorPrice = product ? round2(Number(product.minPrice)) : 0;
-
-      // Server-authoritative pricing: a client may not override a product-backed
-      // line outside the tenant's [minPrice, price] range.
-      if (product && input.price !== undefined) {
-        const requested = round2(input.price);
-        if (requested < floorPrice || requested > (listPrice as number)) {
-          throw new BadRequestException(
-            `Item price for ${product.name} must be between ${floorPrice} and ${listPrice} ${product.currency}`
-          );
-        }
-      }
-
-      const price = input.price !== undefined ? round2(input.price) : listPrice ?? 0;
-      const currency = (input.currency ?? product?.currency ?? 'TZS').toUpperCase();
-      const productName = input.productName?.trim() || product?.name || 'Item';
-      const quantity = input.quantity;
-      resolved.push({
-        id: newId(),
-        productId: product?.id ?? null,
-        legacyProductId: input.legacyProductId ?? null,
-        productName,
-        price,
-        minPrice: floorPrice,
-        currency,
-        quantity,
-        subtotal: round2(price * quantity),
-      });
-    }
-    return resolved;
-  }
-
   // ── Stock integration (single path: StockService.applyChange) ────────────────
+  /** Restores stock when an order is refunded (idempotent per item+reason). */
+  async restoreStockForRefund(tenantId: string, orderId: string, actor: string): Promise<void> {
+    const order = await this.prisma.db.order.findFirst({ where: { id: orderId, tenantId }, include: { items: true } });
+    if (!order) return;
+    await this.changeStock(tenantId, orderId, order.items, 'refund', 'restore', actor);
+  }
+
   private async changeStock(
     tenantId: string,
     orderId: string,
     items: Array<{ id: string; productId: string | null; quantity: number }>,
-    reason: 'order_created' | 'order_rejected' | 'order_deleted' | 'order_restored',
+    reason: 'order_created' | 'order_rejected' | 'order_deleted' | 'order_restored' | 'refund',
     direction: 'deduct' | 'restore',
     recordedBy: string
   ): Promise<void> {
@@ -221,6 +172,8 @@ export class OrdersService {
   }
 
   async create(tenantId: string, input: CreateOrderInput, actor: string, cash = false) {
+    // Service-level entitlement check: the WhatsApp flow reaches this directly.
+    await this.billing.assertLimit(tenantId, 'ordersPerMonth');
     const clientRef = input.clientRef?.trim() ? input.clientRef.trim() : null;
 
     // Idempotency: a replayed create with the same clientRef returns the original.
@@ -229,7 +182,7 @@ export class OrdersService {
       if (existing) return { success: true, order: this.serialize(existing), idempotent: true };
     }
 
-    const items = await this.resolveItems(tenantId, input.items);
+    const items = await this.intake.resolveItems(tenantId, input.items);
     const calculatedTotal = round2(items.reduce((sum, i) => sum + i.subtotal, 0));
     const floorTotal = round2(items.reduce((sum, i) => sum + i.minPrice * i.quantity, 0));
     const offered = input.offeredTotal !== undefined ? round2(input.offeredTotal) : undefined;
@@ -249,7 +202,7 @@ export class OrdersService {
     try {
       orderId = await this.prisma.transaction(async () => {
         const id = newId();
-        const orderNumber = await this.nextOrderNumber(tenantId);
+        const orderNumber = await this.intake.nextOrderNumber(tenantId);
         const now = new Date();
 
         await this.prisma.db.order.create({
@@ -258,11 +211,13 @@ export class OrdersService {
             tenantId,
             orderNumber,
             clientRef,
-            customerPhone: input.customerPhone,
-            customerName: input.customerName,
-            customerEmail: input.customerEmail,
-            deliveryLocation: input.deliveryLocation,
-            deliveryPhone: input.deliveryPhone,
+            customerPhone: encryptPii(input.customerPhone) ?? '',
+            customerPhoneIdx: input.customerPhone ? blindIndex(input.customerPhone) : null,
+            customerName: encryptPii(input.customerName) ?? 'Customer',
+            // PII at rest: encrypted; the blind-index rollout covers name/phone.
+            customerEmail: encryptPii(input.customerEmail) ?? '',
+            deliveryLocation: encryptPii(input.deliveryLocation) ?? '',
+            deliveryPhone: encryptPii(input.deliveryPhone) ?? '',
             source,
             recordedBy: actor,
             total: String(total),
@@ -335,7 +290,7 @@ export class OrdersService {
           });
         }
 
-        await this.billing.incrementUsage(tenantId, 'ordersPerMonth');
+        await this.billing.incrementUsage(tenantId, 'ordersPerMonth', 1, true);
         return id;
       });
     } catch (err) {

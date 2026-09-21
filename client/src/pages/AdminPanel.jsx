@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
@@ -105,7 +106,7 @@ export default function AdminPanel() {
 
   const resetTenantFlags = async () => {
     if (!flagTenantId) return;
-    if (!confirm(t('feature.confirm_reset_tenant'))) return;
+    if (!(await confirmDialog(t('feature.confirm_reset_tenant')))) return;
     setFlagSaving(true);
     try {
       const res = await api.delete(`/admin/feature-flags/${flagTenantId}`);
@@ -172,7 +173,7 @@ export default function AdminPanel() {
   }, [showToast, t]);
 
   const handleApprove = async (id, name) => {
-    if (!confirm(t('admin_panel.confirm_approve', { name }))) return;
+    if (!(await confirmDialog(t('admin_panel.confirm_approve', { name })))) return;
     try {
       await api.put(`/admin/users/${id}/approve`);
       showToast(t('admin_panel.confirmed_approve'), 'success');
@@ -202,7 +203,7 @@ export default function AdminPanel() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!confirm(t('admin_panel.confirm_delete', { name }))) return;
+    if (!(await confirmDialog(t('admin_panel.confirm_delete', { name })))) return;
     try {
       await api.delete(`/admin/users/${id}`);
       showToast(t('admin_panel.confirmed_deleted'), 'success');
@@ -213,7 +214,7 @@ export default function AdminPanel() {
   };
 
   const handleImpersonate = async (id, name) => {
-    if (!confirm(t('admin_panel.confirm_impersonate', { name }))) return;
+    if (!(await confirmDialog(t('admin_panel.confirm_impersonate', { name })))) return;
     try {
       const res = await api.post(`/admin/impersonate/${id}`);
       if (res.success) {
@@ -286,7 +287,7 @@ export default function AdminPanel() {
   };
 
   const handleSuspend = async (id, name, currentSuspended) => {
-    if (!confirm(currentSuspended ? t('admin_panel.confirm_unsuspend', { name }) : t('admin_panel.confirm_suspend', { name }))) return;
+    if (!(await confirmDialog(currentSuspended ? t('admin_panel.confirm_unsuspend', { name }) : t('admin_panel.confirm_suspend', { name })))) return;
     try {
       await api.put(`/admin/users/${id}/suspend`, { suspended: !currentSuspended });
       showToast(t('admin_panel.confirmed_suspend'), 'success');
@@ -297,7 +298,7 @@ export default function AdminPanel() {
   };
 
   const handleSuspendSubAdmin = async (id, name, currentSuspended) => {
-    if (!confirm(currentSuspended ? t('admin_panel.confirm_unsuspend', { name }) : t('admin_panel.confirm_suspend', { name }))) return;
+    if (!(await confirmDialog(currentSuspended ? t('admin_panel.confirm_unsuspend', { name }) : t('admin_panel.confirm_suspend', { name })))) return;
     try {
       await api.put(`/admin/users/${id}/suspend`, { suspended: !currentSuspended });
       showToast(t('admin_panel.confirmed_suspend'), 'success');
@@ -336,7 +337,7 @@ export default function AdminPanel() {
   };
 
   const handleDeleteSubAdmin = async (id, name) => {
-    if (!confirm(t('admin_panel.confirm_delete_sub_admin', { name }))) return;
+    if (!(await confirmDialog(t('admin_panel.confirm_delete_sub_admin', { name })))) return;
     try {
       await api.delete(`/admin/sub-admins/${id}`);
       showToast(t('admin_panel.confirmed_deleted'), 'success');

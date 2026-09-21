@@ -51,6 +51,52 @@ export class QueueService implements OnModuleDestroy {
     });
   }
 
+  /** Per-queue job counts for operator observability (legacy `/admin/queues`). */
+  async stats(): Promise<{ redis: boolean; queues: Record<string, unknown> }> {
+    if (!this.connection) return { redis: false, queues: {} };
+    const entries = await Promise.all(
+      QUEUES.map(async (name) => {
+        const queue = this.getQueue(name);
+        const counts = queue ? await queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed') : {};
+        return [name, counts] as const;
+      })
+    );
+    return { redis: true, queues: Object.fromEntries(entries) };
+  }
+
+  /** Recent dead-lettered jobs (the `dlq` queue). */
+  async deadLetters(limit = 50): Promise<Array<Record<string, unknown>>> {
+    if (!this.connection) return [];
+    const queue = this.getQueue('dlq');
+    if (!queue) return [];
+    const jobs = await queue.getJobs(['waiting', 'failed', 'delayed'], 0, Math.max(0, limit - 1), false);
+    return jobs.map((job) => ({
+      id: job.id,
+      name: job.name,
+      data: job.data,
+      failedReason: job.failedReason,
+      attemptsMade: job.attemptsMade,
+      timestamp: job.timestamp,
+    }));
+  }
+
+  /** Fetch a dead-letter job (for admin replay). */
+  async getDeadLetter(id: string): Promise<{ id: string; data: Record<string, unknown> } | null> {
+    if (!this.connection) return null;
+    const queue = this.getQueue('dlq');
+    const job = queue ? await queue.getJob(id) : null;
+    if (!job) return null;
+    return { id: String(job.id), data: (job.data ?? {}) as Record<string, unknown> };
+  }
+
+  /** Remove a dead-letter job after it has been replayed. */
+  async removeDeadLetter(id: string): Promise<void> {
+    if (!this.connection) return;
+    const queue = this.getQueue('dlq');
+    const job = queue ? await queue.getJob(id) : null;
+    if (job) await job.remove();
+  }
+
   async onModuleDestroy(): Promise<void> {
     for (const q of this.queues.values()) {
       try {

@@ -31,6 +31,7 @@ describe('env validation (M10 hardening)', () => {
       RLS_ENABLED: 'true',
       REDIS_URL: 'redis://redis:6379',
       ENCRYPTION_KEY: 'b'.repeat(64),
+      STORAGE_SIGNING_SECRET: 'c'.repeat(64),
       CORS_ORIGINS: 'https://uzanite.shop,https://www.uzanite.shop',
     });
     expect(env.NODE_ENV).toBe('production');

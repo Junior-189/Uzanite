@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { ProductsService } from '../../src/modules/catalog/products.service';
+import { LocalStorageService } from '../../src/storage/local-storage.service';
 import { StockService } from '../../src/modules/catalog/stock.service';
 import { OrdersService } from '../../src/modules/commerce/orders.service';
 import { OutboxService } from '../../src/outbox/outbox.service';
@@ -37,7 +38,7 @@ d('finance integration (Postgres)', () => {
     const uow = new UnitOfWorkService(h.prisma);
     const billing = h.billing;
     ledger = new LedgerService(h.prisma);
-    products = new ProductsService(h.prisma, stock);
+    products = new ProductsService(h.prisma, stock, new LocalStorageService(h.config));
     orders = new OrdersService(h.prisma, stock, outbox, billing, ledger);
     payments = new PaymentsService(h.prisma, orders, ledger, outbox, new PaymentAdaptersService());
   });
@@ -163,11 +164,15 @@ d('finance integration (Postgres)', () => {
     expect(payment?.status).toBe('failed');
     expect(await h.prisma.base.ledgerEntry.count({ where: { tenantId: t, type: 'payment_in' } })).toBe(0);
     expect((await h.prisma.base.order.findUnique({ where: { id: order.id } }))?.status).not.toBe('PAID');
+    // A mismatched-but-real payment must raise an operator notification.
+    const notice = await h.prisma.base.notification.findFirst({ where: { tenantId: t, type: 'payment_awaiting_review' } });
+    expect(notice).toBeTruthy();
   });
 
   it('refunds within bounds, writes a debit ledger entry, and is terminal when fully refunded', async () => {
     const t = await seedTenant(h, 'fin-f');
-    const { order } = await approvedOrder(t, 1, 3000);
+    const { order, product } = await approvedOrder(t, 1, 3000);
+    expect((await h.prisma.base.product.findUnique({ where: { id: product.id } }))?.stock).toBe(49);
     const confirmed = await withTenant(t, () => payments.confirmManual(t, order.id, { method: 'Cash', reference: 'R-9' } as never, 'Owner'));
     const paymentId = confirmed.payment.id;
 
@@ -185,6 +190,8 @@ d('finance integration (Postgres)', () => {
     // Full remaining refund flips the payment to refunded (terminal).
     await withTenant(t, () => payments.refund(t, paymentId, { amount: 2000, reason: 'rest' } as never, 'Owner'));
     expect((await h.prisma.base.payment.findUnique({ where: { id: paymentId } }))?.status).toBe('refunded');
+    // Full refund returns the goods to stock.
+    expect((await h.prisma.base.product.findUnique({ where: { id: product.id } }))?.stock).toBe(50);
     await expect(withTenant(t, () => payments.refund(t, paymentId, { amount: 1, reason: 'x' } as never, 'Owner'))).rejects.toThrow(/exceeds/);
   });
 

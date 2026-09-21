@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MetricsService } from '../../metrics/metrics.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
+import { decryptPii } from '../../security/pii';
 import { runAsSystem } from '../../context/tenant-context';
 import { OutboxService } from '../../outbox/outbox.service';
 import { OrdersService } from '../commerce/orders.service';
@@ -136,7 +137,7 @@ export class PaymentsService {
               idempotencyKey,
               amount: String(order.total),
               currency: order.currency,
-              phone: input.phone ?? order.customerPhone,
+              phone: input.phone ?? decryptPii(order.customerPhone),
               status: 'initiated',
               initiatedBy: actor,
             },
@@ -168,7 +169,7 @@ export class PaymentsService {
         orderId,
         amount: Number(order.total),
         currency: order.currency,
-        phone: input.phone ?? order.customerPhone,
+        phone: input.phone ?? decryptPii(order.customerPhone),
         method: input.method,
         reference: payment.id,
       });
@@ -208,13 +209,23 @@ export class PaymentsService {
     const paymentId = await this.prisma.transaction(async () => {
       const order = await this.getOrderOrThrow(tenantId, orderId);
 
-      // Idempotency: an already-settled order returns (or backfills) its payment.
+      // Idempotency: an already-settled order returns its payment.
       if (order.status === 'PAID' || order.status === 'DELIVERED') {
         const settled = await this.prisma.db.payment.findFirst({
           where: { tenantId, orderId, status: 'succeeded' },
           orderBy: { createdAt: 'desc' },
         });
         if (settled) return { id: settled.id, idempotent: true };
+
+        // Cash/POS orders settle at creation with a `cash_sale` ledger credit
+        // and no Payment row. Crediting again here would double-count revenue.
+        const orderCredit = await this.prisma.db.ledgerEntry.findFirst({
+          where: { tenantId, refType: 'order', refId: orderId, direction: 'credit' },
+          select: { id: true },
+        });
+        if (orderCredit) {
+          throw new ConflictException('Order is already settled; no manual payment is required.');
+        }
       }
 
       const idempotencyKey = `order:${orderId}:manual:${input.reference}`;
@@ -234,7 +245,7 @@ export class PaymentsService {
               idempotencyKey,
               amount: String(order.total),
               currency: order.currency,
-              phone: order.customerPhone,
+              phone: decryptPii(order.customerPhone),
               status: 'succeeded',
               proofPath: input.proofPath ?? null,
               raw: { reference: input.reference } as object,
@@ -307,12 +318,15 @@ export class PaymentsService {
         let mapped = mapStatus(input.status);
 
         // Integrity: never credit a different amount/currency than recorded.
+        let mismatch = false;
         if (mapped === 'succeeded') {
           if (input.currency && input.currency.toUpperCase() !== payment.currency) {
             mapped = 'failed';
+            mismatch = true;
             input.failureReason = `Currency mismatch (expected ${payment.currency}, got ${input.currency})`;
           } else if (input.amount !== undefined && round2(input.amount) !== Number(payment.amount)) {
             mapped = 'failed';
+            mismatch = true;
             input.failureReason = `Amount mismatch (expected ${payment.amount}, got ${input.amount})`;
           }
         }
@@ -328,6 +342,29 @@ export class PaymentsService {
         });
         await this.recordAttempt(payment, mapped, {}, input.raw ?? {});
         this.metrics?.observePaymentWebhook(input.providerName, mapped);
+
+        if (mismatch) {
+          // A genuinely-paid transaction was auto-failed on a mismatch; surface
+          // it to the operator for manual review instead of losing it silently.
+          await this.prisma.db.notification.createMany({
+            data: [{
+              id: newId(),
+              tenantId: payment.tenantId,
+              type: 'payment_awaiting_review',
+              title: 'Payment needs review',
+              message: input.failureReason || 'A provider payment did not match the order',
+              priority: 'high',
+              dedupeKey: `payment-review:${payment.id}`,
+              data: { paymentId: payment.id, orderId: payment.orderId, provider: input.providerName } as object,
+            }],
+            skipDuplicates: true,
+          });
+          await this.outbox.enqueue({
+            type: 'payment.awaiting_review',
+            tenantId: payment.tenantId,
+            payload: { paymentId: payment.id, orderId: payment.orderId, reason: input.failureReason ?? '' },
+          });
+        }
 
         if (mapped === 'succeeded') {
           // The money has arrived. Record it regardless of the order's workflow
@@ -465,6 +502,10 @@ export class PaymentsService {
 
       if (amount >= remaining) {
         await this.prisma.db.payment.update({ where: { id: paymentId }, data: { status: 'refunded' } });
+        // Full refund: return the goods to stock so inventory and the books agree.
+        if (payment.orderId) {
+          await this.orders.restoreStockForRefund(tenantId, payment.orderId, actor);
+        }
       }
 
       await this.outbox.enqueue({

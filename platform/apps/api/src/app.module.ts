@@ -10,6 +10,7 @@ import { validateEnv } from './config/env';
 import { JWT_ALGORITHM, JWT_AUDIENCE, JWT_ISSUER } from './security/jwt.constants';
 import { getCorrelation } from './context/tenant-context';
 import { ObservabilityModule } from './observability/observability.module';
+import { SecurityModule } from './security/security.module';
 import { AdminAccessAuditInterceptor } from './interceptors/admin-access-audit.interceptor';
 import { ApiVersionInterceptor } from './versioning/api-version.interceptor';
 import { CacheModule } from './cache/cache.module';
@@ -44,6 +45,14 @@ import { MessagingModule } from './modules/messaging/messaging.module';
 import { ConversationModule } from './modules/conversation/conversation.module';
 import { HealthModule } from './modules/health/health.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
+import { FilesModule } from './modules/files/files.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { RecycleBinModule } from './modules/recycle-bin/recycle-bin.module';
+import { ContactsModule } from './modules/contacts/contacts.module';
+import { StaffModule } from './modules/staff/staff.module';
+import { LedgersModule } from './modules/ledgers/ledgers.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { BroadcastModule } from './modules/broadcast/broadcast.module';
 
 @Module({
   imports: [
@@ -103,6 +112,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
     }),
     EventEmitterModule.forRoot(),
     ObservabilityModule,
+    SecurityModule,
     CacheModule,
     PrismaModule,
     RedisModule,
@@ -123,6 +133,14 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
     MessagingModule,
     ConversationModule,
     PrivacyModule,
+    FilesModule,
+    DashboardModule,
+    RecycleBinModule,
+    ContactsModule,
+    StaffModule,
+    LedgersModule,
+    ReportsModule,
+    BroadcastModule,
     HealthModule,
   ],
   providers: [

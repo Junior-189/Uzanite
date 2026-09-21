@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import api from '../utils/api';
+import { resolveApiUrl } from '../utils/apiRouting';
+import { adaptAuthResponse } from '../utils/platformBridge';
 import db from '../db';
+import { clearTenantData } from '../db/helpers';
 import {
   clearSession,
   getAccessToken,
@@ -44,13 +47,12 @@ async function resumeSession() {
   if (!refreshToken) return null;
 
   try {
-    const apiUrl = import.meta.env.VITE_API_URL || '/api';
-    const res = await fetch(`${apiUrl}/auth/refresh`, {
+    const res = await fetch(resolveApiUrl('/auth/refresh'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    const json = await res.json();
+    const json = adaptAuthResponse('/auth/refresh', await res.json());
     if (!json?.success || !json.token) {
       clearSession();
       return null;
@@ -103,17 +105,21 @@ export function AuthProvider({ children }) {
   }, [token, user?.role]);
 
   const login = useCallback(async (email, password) => {
-    const apiUrl = import.meta.env.VITE_API_URL || '/api';
-    const res = await fetch(`${apiUrl}/auth/login`, {
+    const res = await fetch(resolveApiUrl('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const json = await res.json();
+    const json = adaptAuthResponse('/auth/login', await res.json());
     if (json.pending) {
       return json;
     }
+    // Two-factor: the platform returns a short-lived challenge instead of a session.
+    if (json.mfaRequired) {
+      return { mfaRequired: true, mfaToken: json.mfaToken };
+    }
     if (json.success) {
+      await clearTenantData();
       await saveAuth(json.token, json.user, json.refreshToken);
       setToken(json.token);
       setUser(json.user);
@@ -122,9 +128,25 @@ export function AuthProvider({ children }) {
     throw Object.assign(new Error(json.error || 'Login failed'), { lockout: json.lockout, retryAfter: json.retryAfter });
   }, []);
 
+  const completeMfa = useCallback(async (mfaToken, code) => {
+    const res = await fetch(resolveApiUrl('/auth/login/2fa'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mfaToken, code }),
+    });
+    const json = adaptAuthResponse('/auth/login/2fa', await res.json());
+    if (json.success) {
+      await clearTenantData();
+      await saveAuth(json.token, json.user, json.refreshToken);
+      setToken(json.token);
+      setUser(json.user);
+      return json;
+    }
+    throw new Error(json.error || 'Invalid authentication code');
+  }, []);
+
   const googleLogin = useCallback(async (credential) => {
-    const apiUrl = import.meta.env.VITE_API_URL || '/api';
-    const res = await fetch(`${apiUrl}/auth/google`, {
+    const res = await fetch(resolveApiUrl('/auth/google'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken: credential }),
@@ -132,6 +154,7 @@ export function AuthProvider({ children }) {
     const json = await res.json();
     if (json.pending) return json;
     if (json.success) {
+      await clearTenantData();
       await saveAuth(json.token, json.user, json.refreshToken);
       setToken(json.token);
       setUser(json.user);
@@ -141,13 +164,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const staffLogin = useCallback(async (email, password) => {
-    const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/staff/login`, {
+    const res = await fetch(resolveApiUrl('/staff/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
     const json = await res.json();
     if (json.success) {
+      await clearTenantData();
       await saveAuth(json.token, json.user, json.refreshToken);
       setToken(json.token);
       setUser(json.user);
@@ -160,7 +184,7 @@ export function AuthProvider({ children }) {
     const refreshToken = getRefreshToken();
     if (refreshToken) {
       try {
-        await fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/logout`, {
+        await fetch(resolveApiUrl('/auth/logout'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
@@ -168,10 +192,10 @@ export function AuthProvider({ children }) {
       } catch { /* best-effort */ }
     }
     await clearAuth();
-    try { await db.dashboardCache.clear(); } catch { /* silent */ }
+    await clearTenantData();
     setToken(null);
     setUser({});
-    window.location.hash = '#/admin/login.html';
+    window.location.assign('/admin/login.html');
   }, []);
 
   const refreshPermissions = useCallback(async () => {
@@ -231,7 +255,7 @@ export function AuthProvider({ children }) {
   }, [user, token]);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, googleLogin, staffLogin, logout, refreshPermissions, hasPermission, toggleLanguage, hydrated }}>
+    <AuthContext.Provider value={{ user, token, login, completeMfa, googleLogin, staffLogin, logout, refreshPermissions, hasPermission, toggleLanguage, hydrated }}>
       {children}
     </AuthContext.Provider>
   );

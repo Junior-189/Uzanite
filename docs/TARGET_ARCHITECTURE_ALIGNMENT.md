@@ -17,19 +17,19 @@
 | Redis + BullMQ (queues, lockout, rate-limit) | **DONE** | Platform + legacy both use Redis-backed queues/limits |
 | Cache / rate-limit on Redis | **DONE** | `platform/apps/api/src/cache`, sliding-window limiter, `TRUST_PROXY_HOPS` |
 | Auth: access 15m + refresh rotation + revoke on suspend | **DONE** | `security/token.service.ts`, `tokenVersion`, `JwtAuthGuard` |
-| **argon2id** instead of bcryptjs | **GAP** | Both stacks use `bcryptjs` (`package.json`, `platform/apps/api/package.json`) |
-| **Admin TOTP 2FA** | **GAP** | No `otplib`/TOTP anywhere |
+| **argon2id** instead of bcryptjs | **DONE (platform)** | Platform hashes with argon2id and upgrades legacy bcrypt hashes transparently on login (`security/password.ts`); legacy app still bcryptjs until decommission |
+| **Admin TOTP 2FA** | **DONE (platform)** | `security/totp.service.ts` + `/auth/totp/*` + `/auth/login/2fa`; enforced for platform admins via `AdminMfaGuard` |
 | helmet / throttler / CORS allow-list | **DONE (equivalent)** | Platform: custom security-headers (M10) + Redis limiter + strict CORS; legacy: helmet + limiters |
 | Signed object storage (S3/R2), no public disk | **PARTIAL** | Legacy `storageService` (local/S3 signed URLs); **platform has no upload endpoint yet** |
 | **Meta Cloud API only; drop Baileys** | **PARTIAL** | Platform is Meta-only; **legacy still ships Baileys** (`src/whatsapp/{client,transport}.js`, `@whiskeysockets/baileys`) |
 | Payments aggregator + webhooks (ClickPesa/AzamPay; Mixx/Airtel) | **PARTIAL** | Adapters exist (`platform/apps/api/src/modules/finance/payments/*`); certification pending; manual is default |
-| Frontend React **+ TypeScript + TanStack Query + RHF + Zod + shadcn** | **GAP** | `client/` is JavaScript React 19 + Vite; no `tsconfig.json` |
-| Capacitor Android (package-id repair) | **GAP** | `appId` mismatch (`capacitor.config.json` vs `applicationId`), `allowMixedContent`, `allowBackup` |
-| **Drop Electron → ship a PWA** | **CONTRADICTS** | `electron/` + electron-builder present; `manifest.json` not linked in `client/index.html` |
+| Frontend React **+ TypeScript + TanStack Query + RHF + Zod + shadcn** | **IN PROGRESS** | TypeScript enabled (`client/tsconfig.json`, `typecheck` gated in CI); `utils/tokenStore.ts` + `utils/api.ts` converted; TanStack Query provider wired; Zod used for session validation. RHF + page-by-page migration pending |
+| Capacitor Android (package-id repair) | **DONE** | Unified to `com.uzanite.app` (capacitor config, gradle namespace+applicationId, strings.xml, `MainActivity` package); `allowBackup=false`, `allowMixedContent=false`. **Android build must be verified with `cap sync` + gradle** |
+| **Drop Electron → ship a PWA** | **DONE** | Electron removed (`electron/`, deps, scripts, desktop-download route); PWA configured (manifest linked, viewport/theme meta, versioned service worker) |
 | Observability: Pino + OpenTelemetry + Sentry | **PARTIAL** | Pino + Sentry-compatible Store-API + W3C trace + optional OTLP (M12); **full OTel SDK not wired** |
 | REST `/api/v1` + OpenAPI | **DONE** | `platform/apps/api/openapi.json` + `platform/scripts/api-contract-check.mjs` |
 | **Move off MongoDB** | **PARTIAL** | Postgres platform exists; **Mongo/Express still present and used by the client** |
-| argon2 / jose kid rotation / sanitize-html / Playwright e2e / Dependabot+audit | **PARTIAL** | `security.yml` (audit/secret-scan/SAST/image scan) present; argon2, jose-kid, sanitize-html, Playwright **missing** |
+| argon2 / kid rotation / sanitize-html / Playwright e2e / Dependabot+audit | **PARTIAL** | `security.yml` present; **argon2id + HS256 `kid` rotation done** (platform); sanitize-html + Playwright e2e still missing |
 | API rules: tenant from token, idempotency, transactions, server-side flags, impersonation claims | **DONE** | Platform: RLS + ALS tenant context, idempotency keys, `runAsSystem`, `@RequirePlanFeature`, `act`/`typ` impersonation + audit |
 
 ---
@@ -49,26 +49,34 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 - This alignment document.
 - README rewritten **Postgres/NestJS-first**, with Express/Mongo labelled *transitional legacy*.
 
-### Batch B — Auth hardening (Phase 0/1; additive, non-destructive)
-1. **argon2id** with transparent rehash: verify existing `bcrypt` hashes, rehash to argon2id on next successful login; keep the `passwordHash` column. Applies to the platform first (legacy second).
-2. **Admin TOTP 2FA** (`otplib`): enroll/verify endpoints, recovery codes, enforced for `platformRole` admins; audit events.
-3. **jose / key rotation (`kid`)** for JWT signing (replace the single HS256 secret with a key set).
+### Batch B — Auth hardening (Phase 0/1) — ✅ DONE, verified locally (not yet pushed)
+1. **argon2id** with transparent rehash: platform now hashes with argon2id (OWASP baseline) and upgrades legacy bcrypt/outdated-argon2 hashes on the next successful login (`security/password.ts`). Covered by unit + integration tests.
+2. **Admin TOTP 2FA** (`otplib`): two-step login (`/auth/login` → `mfaRequired` challenge → `/auth/login/2fa`), enrollment (`/auth/totp/enroll|confirm|disable`), 8 single-use recovery codes (hashed), secret AES-256-GCM encrypted. Enforced for platform admins via `AdminMfaGuard`. Migration `0016_totp_2fa`.
+3. **JWT key rotation (`kid`)**: `JwtKeyService` supports a `JWT_KEYS` key set with `JWT_ACTIVE_KID`; tokens verify against their header `kid`, so keys rotate without invalidating outstanding sessions. Retains pinned issuer/audience/HS256.
+- Verification: platform CI green — **API 180 tests / 31 files, worker 20, contracts 6**, typecheck, Prisma drift gate, build.
 
-### Batch C — Client modernization (Phase 5)
-1. **TypeScript** migration (incremental: `allowJs`, start with `utils/`, `context/`, `db/`).
-2. **TanStack Query** for server state; **React Hook Form + Zod** for forms.
-3. **PWA**: link `manifest.json`, versioned service-worker caches, `start_url` fix.
-4. Android: one `applicationId`, `allowBackup=false`, `allowMixedContent=false`.
+### Batch C — Client modernization (Phase 5) — ✅ foundation DONE, verified locally (not pushed)
+1. **TypeScript foundation:** added `client/tsconfig.json` (`strict`, `allowJs`, `checkJs:false`) and a `typecheck` script (gated in CI); converted `src/utils/tokenStore.ts` and `src/utils/api.ts` to fully-typed modules. Remaining `.jsx` files are still JS and convert page-by-page.
+2. **TanStack Query** provider wired (`src/lib/queryClient.ts`, mounted in `main.jsx`) with mobile-tuned defaults (reads retry, mutations never retry). **Zod** validates the persisted session profile in `tokenStore`. React Hook Form is deferred until a form is migrated (R8: no unused deps).
+3. **PWA:** `manifest.json` linked in `index.html` with `%BASE_URL%`, theme/apple meta, and a relative `start_url`/`scope`; service worker rewritten to **versioned caches** that purge only old versions (no more wipe-everything); SW update poll reduced from 60s to 6h + on-focus.
+4. **Android:** unified the package id to `com.uzanite.app` across `capacitor.config.json`, `build.gradle` (namespace + applicationId), `strings.xml`, and `MainActivity`; `allowBackup=false` and `allowMixedContent=false` already in place. Verify the native build with `npm run cap:sync` + gradle.
+- Verification: client `typecheck` ✅, `lint` ✅, `test` 16/16 ✅, `build` ✅.
 
-### Batch D — Retire contradicted layers (destructive — needs sign-off, only after cutover)
-1. **Drop Electron** (the plan says PWA instead; Electron only wraps `uzanite.shop`).
-2. **Drop Baileys** (Meta-only; delete `src/whatsapp/{client,transport}.js` + dependency).
-3. **Remove the Express/Mongo app** once every domain is cut over and reconciled.
+### Batch D — Retire contradicted layers (destructive)
+1. **Drop Electron — ✅ DONE.** Removed `electron/`, its scripts/devDependencies, the electron-builder config, and the `/admin/UZANITE-Setup.exe` download route. The PWA (Batch C) replaces it.
+2. **Drop Baileys — ⛔ BLOCKED.** The legacy app is still the live system of record and its transport is env-controlled (`WHATSAPP_TRANSPORT`); deleting Baileys (`src/whatsapp/{client,transport}.js` + the dependency) is only safe once production is confirmed Meta-only and the legacy app is being decommissioned.
+3. **Remove the Express/Mongo app — ⛔ BLOCKED.** The client still calls legacy `/api` for every domain except auth/tenants (orders, products, payments, reports, staff, whatsapp, notifications, …). Deleting Mongo/Express now would break the running product. This is gated on **finishing Batch E** (cut over the remaining domains + reconciliation green).
 
-### Batch E — Cutover to the target backend (the real project)
-1. Point the client at `/api/v1` for wave 1 (auth, tenants, billing, admin) behind a per-tenant flag; shadow-compare reads.
-2. Migrate commerce/catalog/finance/messaging; keep the reconciliation job green.
-3. Retire legacy routes domain by domain; then run Batch D.
+> Deletion order is therefore: **Electron (done) → finish cutover → Baileys → Mongo/Express.** Do not invert it.
+>
+> **See [CUTOVER_COVERAGE.md](CUTOVER_COVERAGE.md)** for the per-domain matrix: ~14 domains the client uses have **no platform implementation**, so the cutover can only "finish" by **building** those platform modules (dashboard, reports, recycle-bin, admin users, staff, contacts, chat, broadcast, WhatsApp account lifecycle, file uploads) — not by deleting the legacy app. File uploads are the next cross-cutting platform build (they unblock products/images and payments/proof).
+
+### Batch E — Cutover to the target backend (the real project) — 🔄 first increment DONE (auth wave), verified locally (not pushed)
+1. **Dual-stack client routing + auth wave:** `client/src/utils/apiRouting.ts` routes a path to `/api/v1` or `/api` based on the `VITE_API_V1` flag (**default off**). The axios client applies it per request; auth call sites use `resolveApiUrl`. Live auth flows the platform does not implement (`/auth/google`, `/auth/staff`, `/auth/theme`) are pinned to legacy.
+2. **Shape compatibility bridge:** `client/src/utils/platformBridge.ts` adapts the platform's `{platformRole, membership role, permission catalogue}` user to the legacy client shape (`role: tenant|staff|sub_admin|super_admin`, `manage_orders`-style permissions), so a flipped cutover does not lock the UI down. Unit-tested.
+3. **Parity harness:** `platform/scripts/api-parity-check.mjs` compares the same authenticated GET against both stacks and reports shape differences — the shadow-compare gate before flipping `VITE_API_V1=true`.
+4. **Not yet cut over:** tenants/billing/admin (their client call sites and platform endpoints do not match yet — e.g. `/admin/users`, `/admin/stats`, feature flags), and commerce/catalog/finance/messaging. Widen `PLATFORM_PREFIXES` one domain at a time once parity is green. Then Batch D (delete legacy/Baileys/Electron).
+- Verification: client `typecheck` ✅, `lint` ✅, `test` 24/24 ✅, `build` ✅. Cutover flag defaults off, so production (legacy) behaviour is unchanged.
 
 ### Batch F — Scale & ops (Phase 6)
 - Read replicas for reports, per-tenant send worker, PgBouncer when replicas ≥ 2, full OTel SDK, load-test gates.
@@ -83,11 +91,11 @@ The React admin's base URL is the **legacy** `'/api'` (`client/src/utils/api.js`
 
 ---
 
-## 5. Recommended next batch
+## 5. Batch status & recommended next batch
 
-**Batch B (auth hardening)** is the highest-value, lowest-risk step that directly matches the plan and does not depend on cutover:
-- argon2id (with backward-compatible rehash),
-- admin TOTP 2FA,
-- JWT key rotation (`kid`).
-
-Ask the operator to confirm Batch B before implementation; Batch D must not start until Batch E's reconciliation is green.
+- **Batch A (positioning/docs):** ✅ done.
+- **Batch B (auth hardening):** ✅ done, verified locally (argon2id, admin TOTP 2FA, JWT `kid` rotation). **Not pushed** per operator instruction.
+- **Batch C (client TypeScript foundation + TanStack Query/Zod + PWA + Android package-id repair):** ✅ foundation done, verified locally. Remaining: page-by-page TSX conversion, TanStack Query adoption per page, React Hook Form for forms, component library (shadcn/ui).
+- **Batch D (delete Electron/Baileys/Mongo):** 🔄 Electron **removed**; Baileys + Mongo/Express **blocked** until the remaining Batch E cutover is complete (client still uses legacy `/api` for most domains).
+- **Platform build-outs (unblocking Batch E/D):** ✅ private file uploads (`POST /api/v1/files`, signed downloads, migration `0017_stored_files`) and ✅ dashboard (`GET /api/v1/dashboard/stats`, now routed) implemented and tested.
+- **Batch E (client cutover to `/api/v1`):** 🔄 auth + tenants + billing + notifications routed (flag default off) via adapters and a parity harness; verified locally, not pushed. Remaining domains are **blocked on missing platform endpoints** — see [CUTOVER_COVERAGE.md](CUTOVER_COVERAGE.md). Prerequisite for Batch D.

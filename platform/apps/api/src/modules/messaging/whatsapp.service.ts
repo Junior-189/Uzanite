@@ -16,6 +16,7 @@ import { OutboxService } from '../../outbox/outbox.service';
 import { QueueService } from '../../queue/queue.service';
 import { paginate } from '../../pagination/pagination';
 import { newId } from '../../ids/id';
+import { blindIndex, decryptPii, encryptPii } from '../../security/pii';
 import { encrypt, tryDecrypt } from '../../crypto/crypto';
 
 type AccountRow = {
@@ -89,6 +90,14 @@ export class WhatsAppService {
     return { success: true, account: this.publicAccount(account as AccountRow) };
   }
 
+  /** Toggle the bot auto-reply pause flag (legacy `/whatsapp/pause|resume`). */
+  async setBotPaused(tenantId: string, paused: boolean) {
+    const account = await this.prisma.db.whatsAppAccount.findFirst({ where: { tenantId } });
+    if (!account) throw new NotFoundException('WhatsApp account not found');
+    await this.prisma.db.whatsAppAccount.update({ where: { id: account.id }, data: { botPaused: paused } });
+    return { success: true, botPaused: paused };
+  }
+
   async deleteAccount(tenantId: string) {
     const res = await this.prisma.db.whatsAppAccount.deleteMany({ where: { tenantId } });
     if (res.count === 0) throw new NotFoundException('WhatsApp account not found');
@@ -155,14 +164,19 @@ export class WhatsAppService {
     const where: Prisma.MessageWhereInput = { tenantId };
     if (query.direction) where.direction = query.direction;
     if (query.status) where.status = query.status;
-    if (query.contactPhone) where.contactPhone = normalizeRecipient(query.contactPhone);
+    if (query.contactPhone) where.contactPhoneIdx = blindIndex(normalizeRecipient(query.contactPhone));
     const page = await paginate<{ id: string }>({
       findMany: (args) => this.prisma.db.message.findMany(args as never) as Promise<{ id: string }[]>,
       where: where as Record<string, unknown>,
       limit: query.limit,
       cursor: query.cursor ?? null,
     });
-    return { success: true, count: page.items.length, messages: page.items, nextCursor: page.nextCursor };
+    const messages = (page.items as Array<{ text?: string; contactPhone?: string }>).map((m) => ({
+      ...m,
+      text: decryptPii(m.text),
+      contactPhone: decryptPii(m.contactPhone),
+    }));
+    return { success: true, count: messages.length, messages, nextCursor: page.nextCursor };
   }
 
   async listConversations(tenantId: string, query: ListConversationsQuery) {
@@ -193,15 +207,16 @@ export class WhatsAppService {
       take: limit + 1,
     });
     const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const nextCursor = hasMore && items.length ? items[items.length - 1].id : null;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore && page.length ? page[page.length - 1].id : null;
+    const items = page.map((c) => ({ ...c, name: decryptPii(c.name), phone: decryptPii(c.phone), email: decryptPii(c.email), lastMessage: decryptPii(c.lastMessage) }));
     return { success: true, count: items.length, conversations: items, nextCursor };
   }
 
   async getMessage(tenantId: string, id: string) {
     const message = await this.prisma.db.message.findFirst({ where: { id, tenantId } });
     if (!message) throw new NotFoundException('Message not found');
-    return { success: true, message };
+    return { success: true, message: { ...message, text: decryptPii(message.text), contactPhone: decryptPii(message.contactPhone) } };
   }
 
   private async requireAccount(tenantId: string) {
@@ -232,7 +247,7 @@ export class WhatsAppService {
     const idempotencyKey = input.idempotencyKey?.trim() || null;
     if (idempotencyKey) {
       const existing = await this.prisma.db.message.findFirst({ where: { tenantId, idempotencyKey } });
-      if (existing) return { success: true, message: existing, idempotent: true };
+      if (existing) return { success: true, message: this.outMessage(existing), idempotent: true };
     }
     const message = await this.prisma.db.message.create({
       data: {
@@ -240,7 +255,8 @@ export class WhatsAppService {
         tenantId,
         accountId: account.id,
         direction: 'outbound',
-        contactPhone: normalizeRecipient(input.to),
+        contactPhone: encryptPii(normalizeRecipient(input.to)) ?? '',
+        contactPhoneIdx: blindIndex(normalizeRecipient(input.to)),
         messageType: 'interactive',
         status: 'queued',
         idempotencyKey,
@@ -253,7 +269,12 @@ export class WhatsAppService {
       tenantId,
       payload: { messageId: message.id, kind: 'interactive', to: message.contactPhone, by: actor },
     });
-    return { success: true, message, idempotent: false };
+    return { success: true, message: this.outMessage(message), idempotent: false };
+  }
+
+  /** Decrypts message PII for API output. */
+  private outMessage<T extends { text?: string | null; contactPhone?: string | null }>(m: T): T {
+    return { ...m, text: decryptPii(m.text), contactPhone: decryptPii(m.contactPhone) };
   }
 
   private async enqueueOutbound(
@@ -267,7 +288,7 @@ export class WhatsAppService {
 
     if (idempotencyKey) {
       const existing = await this.prisma.db.message.findFirst({ where: { tenantId, idempotencyKey } });
-      if (existing) return { success: true, message: existing, idempotent: true };
+      if (existing) return { success: true, message: this.outMessage(existing), idempotent: true };
     }
 
     const raw =
@@ -283,9 +304,10 @@ export class WhatsAppService {
         tenantId,
         accountId: account.id,
         direction: 'outbound',
-        contactPhone: normalizeRecipient(input.to),
+        contactPhone: encryptPii(normalizeRecipient(input.to)) ?? '',
+        contactPhoneIdx: blindIndex(normalizeRecipient(input.to)),
         messageType: kind,
-        text: kind === 'text' ? String(input.text ?? '') : '',
+        text: kind === 'text' ? (encryptPii(String(input.text ?? '')) ?? '') : '',
         templateName: kind === 'template' ? String(input.templateName ?? '') : null,
         mediaId: kind === 'media' ? ((input.mediaId as string | undefined) ?? null) : null,
         status: 'queued',
@@ -303,7 +325,7 @@ export class WhatsAppService {
       payload: { messageId: message.id, kind, to: message.contactPhone, by: actor },
     });
 
-    return { success: true, message, idempotent: false };
+    return { success: true, message: this.outMessage(message), idempotent: false };
   }
 
   // This handler opts out of the request-wide RLS transaction

@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { MetaClient } from '@uzanite/messaging';
 import { createHarness, resetDb, hasDb, Harness } from './setup';
 import { ProductsService } from '../../src/modules/catalog/products.service';
+import { LocalStorageService } from '../../src/storage/local-storage.service';
 import { StockService } from '../../src/modules/catalog/stock.service';
 import { OrdersService } from '../../src/modules/commerce/orders.service';
 import { BillingService } from '../../src/modules/billing/billing.service';
@@ -12,6 +13,8 @@ import { PaymentsService } from '../../src/modules/finance/payments.service';
 import { PaymentAdaptersService } from '../../src/modules/finance/payments/payment-adapters.service';
 import { WhatsAppService } from '../../src/modules/messaging/whatsapp.service';
 import { ConversationService } from '../../src/modules/conversation/conversation.service';
+import { decryptPii } from '../../src/security/pii';
+import { isEncrypted } from '@uzanite/messaging';
 import { OutboxService } from '../../src/outbox/outbox.service';
 import { QueueService } from '../../src/queue/queue.service';
 import { UnitOfWorkService } from '../../src/prisma/unit-of-work.service';
@@ -32,7 +35,7 @@ d('conversation flows (Postgres)', () => {
     const uow = new UnitOfWorkService(h.prisma);
     const billing = h.billing;
     const ledger = new LedgerService(h.prisma);
-    products = new ProductsService(h.prisma, stock);
+    products = new ProductsService(h.prisma, stock, new LocalStorageService(h.config));
     orders = new OrdersService(h.prisma, stock, outbox, billing, ledger);
     const adapters = new PaymentAdaptersService();
     const payments = new PaymentsService(h.prisma, orders, ledger, outbox, adapters);
@@ -89,7 +92,7 @@ d('conversation flows (Postgres)', () => {
   // Text of a reply: plain text messages use `text`; interactive use raw.body.
   async function outboundText(tenantId: string) {
     return (await outbound(tenantId))
-      .map((m) => m.text || ((m.raw as { body?: string } | null)?.body ?? ''))
+      .map((m) => decryptPii(m.text) || ((m.raw as { body?: string } | null)?.body ?? ''))
       .join(' ');
   }
 
@@ -131,7 +134,9 @@ d('conversation flows (Postgres)', () => {
 
     const created = await h.prisma.base.order.findMany({ where: { tenantId } });
     expect(created).toHaveLength(1);
-    expect(created[0].customerName).toBe('Alice');
+    // PII is encrypted at rest; the API decrypts on read.
+    expect(isEncrypted(created[0].customerName)).toBe(true);
+    expect(decryptPii(created[0].customerName)).toBe('Alice');
     expect(Number(created[0].total)).toBe(3000);
     expect(created[0].status).toBe('PENDING');
 
@@ -316,5 +321,19 @@ d('conversation flows (Postgres)', () => {
     expect(reset).toBeGreaterThanOrEqual(1);
     const conv = await h.prisma.base.conversation.findFirst({ where: { tenantId } });
     expect(conv?.step).toBe('MAIN_MENU');
+  });
+
+  it('creates state via upsert and advances the optimistic version per message', async () => {
+    const { tenantId } = await seedTenant('conv-ver');
+    const account = await h.prisma.base.whatsAppAccount.findFirst({ where: { tenantId } });
+
+    await say(tenantId, account!.id, '255700000123', 'Hi');
+    const first = await h.prisma.base.conversation.findFirst({ where: { tenantId, contactPhone: '255700000123' } });
+    expect(first).toBeTruthy();
+    expect(first!.version).toBeGreaterThanOrEqual(1);
+
+    await say(tenantId, account!.id, '255700000123', 'Hello again');
+    const second = await h.prisma.base.conversation.findFirst({ where: { tenantId, contactPhone: '255700000123' } });
+    expect(second!.version).toBe(first!.version + 1);
   });
 });

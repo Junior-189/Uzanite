@@ -30,7 +30,33 @@ export const resetPasswordSchema = z
   .object({ token: z.string().min(10), newPassword: password })
   .strict();
 
+// ── TOTP two-factor ──────────────────────────────────────────────────────────
+// Second step of login: exchange the short-lived challenge for a session.
+export const loginMfaSchema = z
+  .object({ mfaToken: z.string().min(10), code: z.string().trim().min(6).max(10) })
+  .strict();
+
+export const totpCodeSchema = z.object({ code: z.string().trim().min(6).max(10) }).strict();
+
+export const totpDisableSchema = z
+  .object({ password: z.string().min(1), code: z.string().trim().min(6).max(10) })
+  .strict();
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type LoginMfaInput = z.infer<typeof loginMfaSchema>;
+export type TotpCodeInput = z.infer<typeof totpCodeSchema>;
+export type TotpDisableInput = z.infer<typeof totpDisableSchema>;
+
+// Legacy `/auth/theme` — tenant UI theme preference.
+export const themeSchema = z.object({ theme: z.enum(['light', 'dark']) }).strict();
+export type ThemeInput = z.infer<typeof themeSchema>;
+
+// Google sign-in: the SPA posts the Google Identity Services ID token.
+export const googleLoginSchema = z.object({ idToken: z.string().min(1).max(4096) }).strict();
+export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
+
+// Enrolling TOTP is a privilege escalation vector; require the password (step-up).
+export const totpEnrollSchema = z.object({ password: z.string().min(1).max(200) }).strict();

@@ -1,3 +1,4 @@
+import { confirmDialog, promptDialog } from '../utils/dialog';
 import { useState, useRef } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -68,7 +69,7 @@ export default function BulkEmailImport({ onImported }) {
 
   const handleImport = async () => {
     if (!text.trim()) return;
-    if (!confirm(t('broadcast.import_confirm', { count: preview?.length || 0 }))) return;
+    if (!(await confirmDialog(t('broadcast.import_confirm', { count: preview?.length || 0 })))) return;
     setImporting(true);
     try {
       const res = await api.post('/broadcast/import-emails', { data: text });

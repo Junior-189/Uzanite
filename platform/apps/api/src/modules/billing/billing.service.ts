@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import {
@@ -193,11 +193,26 @@ export class BillingService {
   }
 
   /**
+   * Service-level entitlement guard. HTTP `@EnforceLimit` only protects routes;
+   * flows (WhatsApp) and bulk endpoints reach services directly. `willAdd`
+   * lets callers reserve N rows at once (e.g. CSV import).
+   */
+  async assertLimit(tenantId: string, metric: string, willAdd = 1): Promise<void> {
+    const check = await this.checkLimit(tenantId, metric);
+    if (check.limit === -1) return;
+    if (check.current + willAdd > check.limit) {
+      throw new ConflictException(
+        `Your plan allows ${check.limit} ${metric} and you already have ${check.current}. Upgrade to add more.`
+      );
+    }
+  }
+
+  /**
    * Atomic monthly counter increment. The previous read-then-create raced the
    * `(tenant_id, metric, period_key)` unique index, so two concurrent orders at
    * a period boundary produced a duplicate-key 500.
    */
-  async incrementUsage(tenantId: string, metric: string, by = 1): Promise<void> {
+  async incrementUsage(tenantId: string, metric: string, by = 1, enforce = false): Promise<void> {
     if (!isKnownLimitMetric(metric)) {
       this.logger.error(`Refusing to increment unknown metric "${metric}"`);
       return;
@@ -205,11 +220,21 @@ export class BillingService {
     if (LIMIT_METRIC_PERIOD[metric] === 'lifetime') return; // counted live
 
     const periodKey = this.periodKey();
-    await this.prisma.db.usageCounter.upsert({
+    const counter = await this.prisma.db.usageCounter.upsert({
       where: { tenantId_metric_periodKey: { tenantId, metric, periodKey } },
       create: { id: newId(), tenantId, metric, periodKey, count: by },
       update: { count: { increment: by } },
     });
+    // Atomic enforcement: the counter increment and the surrounding create share
+    // one transaction, so throwing here rolls the create back (closes the TOCTOU
+    // where N concurrent requests all pass a pre-check).
+    if (enforce) {
+      const status = await this.getStatusForGuard(tenantId);
+      const limit = status.limits?.[metric];
+      if (limit !== undefined && limit !== -1 && Number(counter.count) > limit) {
+        throw new ConflictException(`Plan limit for ${metric} reached (${limit}). Upgrade to continue.`);
+      }
+    }
     await this.invalidate(tenantId);
   }
 

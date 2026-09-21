@@ -1,17 +1,14 @@
 {
   "_locale": "sw",
   "_name": "Kiswahili",
-
   "language.select": "🌐 *Chagua lugha / Choose language*\n\n1️⃣  English\n2️⃣  Kiswahili\n\n_Jibu kwa 1 au 2_",
   "language.selected": "✅ Lugha imewekwa kwa Kiswahili. Tuanze! 🚀",
-
   "main_menu": "🏪 *Karibu {businessName}!*\n\nUngependa kufanya nini?\n\n1️⃣  Tazama Bidhaa\n2️⃣  Angalia Maagizo Yangu\n3️⃣  Fuata Agizo\n4️⃣  Wasiliana Nasi\n5️⃣  Badilisha Lugha / Change Language\n\n_Jibu kwa namba (1-5)_",
   "main_menu.btn_browse": "Tazama Bidhaa",
   "main_menu.btn_orders": "Maagizo Yangu",
   "main_menu.btn_track": "Fuata Agizo",
   "main_menu.btn_contact": "Wasiliana Nasi",
   "main_menu.btn_language": "Badilisha Lugha",
-
   "cart.empty": "🛒 Rukwama yako haina kitu.\n\nAndika *1* kutazama bidhaa.",
   "cart.menu": "🛒 *Rukwama Yako*\n\n{items}\n\n*Jumla: {currency} {total}*\n\n1️⃣  Maliza Ununuzi\n2️⃣  Ongeza bidhaa\n3️⃣  Futa rukwama\n0️⃣  Menyu kuu",
   "cart.btn_checkout": "Maliza Ununuzi",
@@ -22,13 +19,11 @@
   "cart.added": "✅ *{name} x{qty}* imeongezwa kwenye rukwama!\n\n{cart_menu}",
   "cart.cleared": "🗑️ Rukwama imefutwa.\n\n{main_menu}",
   "cart.empty_checkout": "🛒 Rukwama yako haina kitu. Tazama bidhaa kwanza.",
-
   "browse_products.title": "🛍️ *Bidhaa Zinazopatikana*\n\n{list}\n\nJibu kwa *namba ya bidhaa* kuona maelezo.",
   "browse_products.btn_cart": "Tazama Rukwama",
   "browse_products.btn_main_menu": "Menyu Kuu",
   "browse_products.invalid": "❓ Tafadhali weka namba kati ya 1 na {max}, au andika *0* kwa menyu kuu.",
   "browse_products.reply_prompt": "{list}\n\nJibu kwa namba ya bidhaa.",
-
   "product_detail.title": "📦 *{name}*\n\n{description}\n\n💰 Bei: *{currency} {price}*\n{stock_line}Unataka ngapi?\n_(Andika idadi au andika *BACK* kurudi nyuma)_",
   "product_detail.stock": "📦 Zinazopatikana: {stock}\n",
   "product_detail.stock_unlimited": "",
@@ -37,7 +32,6 @@
   "product_detail.out_of_stock": "❌ {stock} tu zinazopatikana.",
   "product_detail.back": "NYUMA",
   "product_detail.no_description": "Hakuna maelezo",
-
   "checkout.name_prompt": "📝 Tafadhali weka *jina lako* kuthibitisha agizo lako:",
   "checkout.name_invalid": "Tafadhali weka jina lako kamili (angalau herufi 2).",
   "checkout.location_prompt": "📍 *Mahali pa Kufikisha*\n\nTafadhali weka *mahali/anuani* utakapotaka agizo lifikishwe:",
@@ -50,28 +44,21 @@
   "checkout.offer_too_low": "Kiwango cha chini kinachokubalika ni {currency} {minTotal}. Tafadhali weka kiasi kikubwa zaidi.",
   "checkout.out_of_stock": "😔 *Samahani!*\n\nBidhaa zifuatazo *zimeisha* kwa sasa:\n\n{items}\n\nTumehifadhi ombi lako. *Utarifiwa kiotomatiki* bidhaa zitakapopatikana! 🙏",
   "checkout.success": "🎉 *Agizo Limetumwa!*\n\nNamba ya Agizo: *{orderNumber}*\nJumla: *{currency} {total}*\n\n📍 *Mahali:* {location}\n📱 *Simu:* {phone}\n\nTutalikagua agizo lako na tutakujibu hivi karibuni.\n\nAndika *TRACK {orderNumber}* kuangalia hali.",
-
   "payment.waiting": "💳 *Kumbukumbu ya Malipo Imepokelewa!*\n\nKumbukumbu: {ref}\nAgizo: {orderNumber}\n\nKumbukumbu yako ya malipo imehifadhiwa. Tafadhali subiri admin athibitishe malipo yako. Utaarifiwa yakiwa yamethibitishwa.",
   "payment.confirmed": "✅ *Malipo Yamethibitishwa!*\n\nKumbukumbu: {ref}\nAgizo: {orderNumber}\n\nMalipo yako yamethibitishwa. Tutaandaa agizo lako.",
   "payment.cancelled": "❌ Uthibitisho wa malipo umeghairiwa. Tafadhali wasiliana na admin kama una matatizo.",
-
   "my_orders.title": "📦 *Maagizo Yako ya Hivi Karibuni*\n\n{list}\n\nAndika *TRACK <namba ya agizo>* kwa maelezo kamili.",
   "my_orders.empty": "📭 Bado huna maagizo.\n\n🛍️ *Bidhaa Zinazopatikana*\n\n{list}\n\nJibu kwa *namba ya bidhaa* kuona maelezo.",
   "my_orders.line": "{i}. *{orderNumber}* — {status} — {currency} {total}",
-
   "track.prompt": "🔍 Andika namba ya agizo lako (mfano ORD-20240101-0001):",
   "track.not_found": "❌ Agizo *{orderNumber}* halikupatikana.",
-
   "contact.title": "📞 *Wasiliana Nasi*\n\nBiashara: {businessName}\nSimu: {phone}",
   "contact.phone": "Hakuna",
-
   "error.generic": "⚠️ Kuna tatizo limejitokeza. Tafadhali jaribu tena au andika *MENU* kuanza upya.",
   "error.product_not_found": "❌ Bidhaa haikupatikana.",
   "error.order_not_found": "❌ Agizo halikupatikana.",
-
   "global.btn_main_menu": "Menyu Kuu",
   "global.footer": "Bonyeza kitufe au andika namba",
-
   "admin.help": "🛠️ *Amri za Admin*\n\n*QUICK_ADD <jina>|<maelezo>|<bei>|<idadi>* — ongeza bidhaa\n   Mfano: QUICK_ADD iPhone 15|Simu mpya|3500000|25\n\n*ORDERS* — tazama maagizo yote\n*ORDERS APPROVED* — chuja kwa hali\n*APPROVE <agizo>* — idhinisha agizo\n*REJECT <agizo> <sababu>* — kataa agizo\n*PAY <agizo>* — omba malipo kutoka kwa mteja\n*CONFIRM_PAYMENT <agizo> <njia> <kumbukumbu>* — thibitisha malipo\n*DELIVER <agizo> [maelezo]* — weka kama imefikishwa\n*TRACK <agizo>* — tazama maelezo ya agizo\n*PRODUCTS* — orodhesha bidhaa zote\n*HELP* — onyesha menyu hii",
   "admin.help_btn_orders": "Tazama Maagizo",
   "admin.help_btn_products": "Tazama Bidhaa",
@@ -104,7 +91,6 @@
   "admin.products_active": "✅",
   "admin.products_inactive": "❌",
   "admin.error": "❌ Hitilafu: {message}",
-
   "order.label_status": "Hali",
   "order.label_customer": "Mteja",
   "order.label_whatsapp": "WhatsApp",
@@ -115,13 +101,11 @@
   "order.label_date": "Tarehe",
   "products.list_empty": "Hakuna bidhaa zinazopatikana kwa sasa.",
   "products.remaining": "({n} zimesalia)",
-
   "notify.admin_new_order": "🔔 *Agizo Jipya Limepokelewa!*\n\n📦 Agizo: *{orderNumber}*\n👤 Mteja: {customer}\n📱 WhatsApp: {phone}\n{location_line}{contact_line}\n🛒 Bidhaa:\n{items}\n\n💰 *Jumla: {currency} {total}*\n\nJibu kwa:\n✅ *APPROVE {orderNumber}* kuidhinisha\n❌ *REJECT {orderNumber} <sababu>* kukataa",
   "notify.admin_payment_proof": "💳 *Uthibitisho wa Malipo Umepokelewa*\n\nAgizo: *{orderNumber}*\nMteja: {customer}\nKiasi: {currency} {total}\nKumbukumbu: {ref}\n\nJibu: *CONFIRM_PAYMENT {orderNumber} <njia> <kumbukumbu>*",
   "notify.admin_item_line": "  • {name} x{qty} — {currency} {subtotal}",
   "notify.admin_location_line": "📍 Mahali: {location}\n",
   "notify.admin_contact_line": "📞 Simu: {phone}\n",
-
   "notify.customer_order_received": "✅ *Agizo Limetumwa Kwa Ufanisi!*\n\nAgizo lako *{orderNumber}* limepokelewa.\nTutakujulisha likishafanyiwa kazi.\n\nJumla: *{currency} {total}*\n\nAndika *TRACK {orderNumber}* kuangalia hali wakati wowote.",
   "notify.customer_order_approved": "🎉 *Agizo Limeidhinishwa!*\n\nHabari {customer}, agizo lako *{orderNumber}* limeidhinishwa na {businessName}!\n\nKiasi cha kulipa: *{currency} {total}*\n\n{paymentInfo}\n\nBaada ya kulipa, tuma *namba yako ya kumbukumbu ya malipo* hapa kuthibitisha.",
   "notify.customer_order_rejected": "❌ *Taarifa ya Agizo*\n\nSamahani, agizo lako *{orderNumber}* halikuweza kufanyiwa kazi.\n{reason}Unaweza kuweka agizo jipya wakati wowote — andika *MENU* kuanza upya.",
@@ -171,7 +155,6 @@
   "recycle_bin.tabs.tenants": "Wapangaji",
   "recycle_bin.deleted_on": "Ulifutwa Tarehe",
   "recycle_bin.deleted_by": "Ulifutwa Na",
-
   "expenses.title": "Matumizi",
   "expenses.desc": "Rekodi na fuatilia matumizi ya biashara yako",
   "expenses.total": "Jumla ya Matumizi",
@@ -203,7 +186,6 @@
   "expenses.saved": "Matumizi yamehifadhiwa",
   "expenses.deleted": "Matumizi yamefutwa",
   "expenses.loading": "Inapakia matumizi...",
-
   "product.cost_label": "Bei ya Gharama",
   "product.cost_placeholder": "Weka bei ya gharama",
   "product.minprice_label": "Bei ya Chini (Kujadili)",
@@ -213,7 +195,6 @@
   "product.negotiable": "🤝 Bei Inajadilika (chini: {currency} {min})",
   "product.profit_label": "Faida",
   "product.profit_tooltip": "Faida = Bei - Gharama",
-
   "order.delete": "Futa Agizo",
   "order.delete_confirm": "Futa agizo hili?",
   "order.print_receipt": "Chapisha Risiti",
@@ -236,7 +217,6 @@
   "order.receipt_download": "Pakua Risiti",
   "order.negotiated_label": "Bei Iliyojadiliwa",
   "order.negotiated_from": "(ilikuwa",
-
   "dashboard.stats_sales": "Jumla ya Mauzo",
   "dashboard.stats_expenses": "Jumla ya Matumizi",
   "dashboard.stats_profit": "Faida Halisi",
@@ -246,7 +226,6 @@
   "dashboard.period_weekly": "Kila Wiki",
   "dashboard.period_monthly": "Kila Mwezi",
   "dashboard.period_annually": "Kila Mwaka",
-
   "nav.stock": "Stoku",
   "nav.debts": "Madeni",
   "nav.purchases": "Manunuzi",
@@ -258,7 +237,6 @@
   "nav.facebook": "Facebook",
   "nav.offline_sms": "SMS ya Nje ya Mtandao",
   "nav.coming_soon": "Inakuja hivi karibuni",
-
   "debt.loading": "Inapakia madeni...",
   "debt.title": "Madeni",
   "debt.new": "Deni Jipya",
@@ -295,7 +273,6 @@
   "debt.customer_name": "Jina la Mteja",
   "debt.add": "Ongeza Deni",
   "debt.edit": "Hariri Deni",
-
   "purchase.loading": "Inapakia manunuzi...",
   "purchase.title": "Manunuzi",
   "purchase.new": "Ununuzi Mpya",
@@ -330,7 +307,6 @@
   "debt.no_unpaid_phones": "Hakuna madeni ambayo hayajalipwa yenye namba za simu",
   "debt.reminder_failed_no_phone": "Mteja hana namba ya simu",
   "debt.not_found": "Deni halikupatikana",
-
   "common.loading": "Inapakia...",
   "common.error": "Hitilafu",
   "common.success": "Imefanikiwa",
@@ -370,7 +346,6 @@
   "common.unknown": "Haijulikani",
   "common.offline": "Nje ya Mtandao",
   "common.online": "Mtandaoni",
-
   "sidebar.admin_panel": "Paneli ya Admin",
   "sidebar.platform_admin": "Simamizi wa Jukwaa",
   "sidebar.loading": "Inapakia...",
@@ -385,34 +360,27 @@
   "sidebar.settings": "Mipangilio",
   "sidebar.toggle_language": "Badilisha lugha",
   "notifications.view_all": "Angalia arifa zote",
-
   "confirm.title": "Una uhakika?",
   "confirm.confirm": "Thibitisha",
   "confirm.cancel": "Ghairi",
   "confirm.deleting": "Inafutwa...",
-
   "period.today": "Leo",
   "period.week": "Wiki",
   "period.month": "Mwezi",
   "period.year": "Mwaka",
   "period.all_time": "Yote",
   "period.label": "Kipindi:",
-
   "report_period.title": "Chagua Kipindi",
-
   "layout.toggle_menu": "Badilisha menyu",
   "layout.impersonating": "Unaangalia akaunti ya ",
   "layout.exit": "Toka",
-
   "error_boundary.title": "Kuna tatizo limetokea",
   "error_boundary.message": "Kuna hitilafu isiyotarajiwa imetokea",
   "error_boundary.reload": "Pakia Upya",
-
   "update.new_version": "Toleo jipya linapatikana!",
   "update.tap_to_update": "Gusa kusasisha sasa.",
   "update.update": "Sasisha",
   "update.dismiss": "Ondoa",
-
   "login.title_welcome": "Karibu Tena",
   "login.subtitle": "Ingia kwenye dashibodi yako",
   "login.title_register": "Usajili Umekamilika",
@@ -429,6 +397,13 @@
   "login.create_password": "Unda nenosiri",
   "login.signing_in": "Inaingia...",
   "login.creating": "Inaunda...",
+  "login.mfa_title": "Uthibitisho wa hatua mbili",
+  "login.mfa_prompt": "Weka msimbo wa tarakimu 6 kutoka kwenye app yako ya uthibitisho.",
+  "login.mfa_code_label": "Msimbo wa uthibitisho",
+  "login.mfa_verify": "Thibitisha",
+  "login.mfa_invalid": "Msimbo wa uthibitisho si sahihi",
+  "login.verifying": "Inathibitisha...",
+  "login.back": "Rudi",
   "login.back_to_home": "Rudi Mwanzo",
   "login.welcome_back": "Karibu Tena",
   "login.signin_tab": "Ingia",
@@ -451,7 +426,6 @@
   "login.pending_login_notice": "Tutakujulisha unapoidhinishwa. Tafadhali subiri.",
   "login.ok_got_it": "Sawa, nimeelewa",
   "login.min_8_chars": "Angalau herufi 8, herufi kubwa na ndogo + nambari + alama",
-
   "change_password.title": "Weka nenosiri jipya",
   "change_password.subtitle": "Lazima ubadilishe nenosiri lako kabla ya kuendelea.",
   "change_password.current": "Nenosiri la sasa",
@@ -460,15 +434,12 @@
   "change_password.rules": "Angalau herufi 8 zenye herufi kubwa, ndogo, nambari na alama maalum.",
   "change_password.submit": "Sasisha nenosiri",
   "change_password.mismatch": "Manenosiri hayafanani.",
-
   "login.forgot_password": "Umesahau nenosiri?",
   "login.forgot_sent": "Kama barua pepe hiyo ipo, kiungo cha kubadilisha nenosiri kimetumwa.",
   "login.forgot_need_email": "Weka barua pepe yako kwanza.",
-
   "reset_password.title": "Weka upya nenosiri lako",
   "reset_password.submit": "Weka upya nenosiri",
   "reset_password.invalid": "Kiungo hiki si sahihi au kimekwisha muda wake.",
-
   "privacy.title": "Faragha na data (PDPA)",
   "privacy.desc": "Hamisha data ya biashara yako au futa data ya kibinafsi ya mteja inapohitajika.",
   "privacy.export_data": "Hamisha data",
@@ -478,7 +449,6 @@
   "privacy.erase_phone_prompt": "Simu ya mteja ya kufuta (acha wazi kutumia barua pepe)",
   "privacy.erase_email_prompt": "Barua pepe ya mteja ya kufuta",
   "privacy.erase_confirm": "Hii itaondoa kabisa data ya mteja. Endelea?",
-
   "settings.title": "Mipangilio",
   "settings.subtitle": "Simamia mapendeleo yako",
   "settings.account_info": "Taarifa za Akaunti",
@@ -508,7 +478,6 @@
   "settings.connected": "Imeunganishwa",
   "settings.disconnected": "Haijaunganishwa",
   "settings.not_configured": "Haijasanidiwa",
-
   "admin_panel.title": "Paneli ya Admin",
   "admin_panel.subtitle": "Usimamizi wa jukwaa",
   "admin_panel.refresh": "Sasisha",
@@ -583,7 +552,6 @@
   "admin_panel.confirmed_name_updated": "Jina limesasishwa",
   "admin_panel.confirmed_email_updated": "Barua pepe imesasishwa",
   "admin_panel.failed_to_load": "Imeshindwa kupakia",
-
   "staff.title": "Usimamizi wa Wafanyakazi",
   "staff.report": "Ripoti",
   "staff.members_count": "Wafanyakazi {count}",
@@ -631,7 +599,6 @@
   "staff.confirmed_staff_created": "Mfanyakazi ameundwa",
   "staff.confirmed_password_reset": "Nenosiri limewekwa upya",
   "staff.confirmed_status_changed": "Mfanyakazi {status}",
-
   "orders.title": "Maagizo",
   "orders.collect_payment": "Kusanya malipo",
   "orders.payment_provider": "Mtoa huduma wa malipo",
@@ -745,7 +712,6 @@
   "orders.confirmed_offline": "Agizo limehifadhiwa nje ya mtandao — litasasishwa mtandaoni",
   "orders.confirmed_receipt_sent": "Risiti imetumwa kwa mteja kupitia WhatsApp",
   "orders.failed_receipt_send": "Imeshindwa kutuma risiti",
-
   "products.title": "Bidhaa",
   "products.offline": "Nje ya Mtandao",
   "products.count": "Bidhaa {count}",
@@ -817,7 +783,6 @@
   "products.confirmed_created": "Bidhaa imeundwa",
   "products.confirmed_offline": "Bidhaa imehifadhiwa nje ya mtandao — itasasishwa mtandaoni",
   "products.failed_save": "Imeshindwa",
-
   "dashboard.loading": "Inapakia dashibodi...",
   "dashboard.no_data": "Hakuna data kwa kipindi hiki",
   "dashboard.min": "Chini:",
@@ -870,7 +835,6 @@
   "dashboard.btn_products": "Bidhaa",
   "dashboard.btn_report": "Ripoti",
   "dashboard.label_dashboard": "Dashibodi",
-
   "contacts.title": "Mawasiliano",
   "contacts.offline": "Nje ya Mtandao",
   "contacts.count": "Mawasiliano {count} ({optedIn} yamejiunga)",
@@ -911,7 +875,6 @@
   "contacts.confirmed_added": "Mwasiliani ameongezwa",
   "contacts.confirmed_offline": "Mwasiliani umehifadhiwa nje ya mtandao",
   "contacts.failed": "Imeshindwa",
-
   "notifications.title": "Arifa",
   "notifications.unread": "Arifa {count} ({unread} haijasomwa)",
   "notifications.download_report": "Pakua Ripoti",
@@ -927,7 +890,6 @@
   "notifications.confirm_clear": "Futa arifa zote?",
   "notifications.confirmed_cleared": "Zimefutwa",
   "notifications.confirmed_read": "Zote zimewekwa kama zimesomwa",
-
   "broadcast.title": "Barua pepe",
   "broadcast.desc": "Tuma ujumbe kwa mawasiliano yote",
   "broadcast.sent_title": "Zilizotumwa",
@@ -971,7 +933,6 @@
   "broadcast.import_invalid_json": "Muundo wa JSON si sahihi",
   "broadcast.import_confirm": "Ingiza anwani {count} za barua pepe?",
   "broadcast.import_preview_count": "Barua pepe {count} zinazo sawa ku-ingizwa",
-
   "business.title": "Biashara",
   "business.settings": "Mipangilio ya Biashara",
   "business.edit_business": "Hariri Biashara",
@@ -987,7 +948,6 @@
   "business.failed_to_load": "Imeshindwa kupakia biashara",
   "business.confirmed_updated": "Biashara imesasishwa",
   "business.failed_update": "Imeshindwa kusasisha",
-
   "whatsapp.title": "WhatsApp",
   "common.saving": "Inahifadhi...",
   "common.load_more": "Pakia zaidi",
@@ -1045,7 +1005,6 @@
   "whatsapp.bot_paused": "Bot ya majibu otomatiki imesitishwa",
   "whatsapp.bot_resumed": "Bot ya majibu otomatiki imerejea",
   "whatsapp.bot_paused_short": "Bot Imesimama",
-
   "recycle_bin.report": "Pakua Ripoti",
   "recycle_bin.name_number": "Jina/Namba",
   "recycle_bin.details": "Maelezo",
@@ -1055,7 +1014,6 @@
   "recycle_bin.confirm_permanent": "Futa kabisa?",
   "recycle_bin.confirmed_restored": "Imerejeshwa",
   "recycle_bin.confirmed_deleted": "Imefutwa",
-
   "activity.title": "Shughuli na Kumbukumbu za Kuingia",
   "activity.subtitle": "Fuatilia wageni, kurasa wanazotembelea, na majaribio ya kuingia",
   "activity.total_visits": "Jumla ya Tembelezo",
@@ -1091,7 +1049,6 @@
   "activity.prev": "Iliyotangulia",
   "activity.next": "Inayofuata",
   "activity.page": "Ukurasa",
-
   "expenses.report": "Ripoti",
   "expenses.records_total": "rekodi — Jumla: {total}",
   "expenses.stat_total_spent": "Jumla ya Matumizi",
@@ -1102,7 +1059,6 @@
   "expenses.confirmed_deleted": "Imefutwa",
   "expenses.confirmed_updated": "Matumizi yamesasishwa",
   "expenses.confirmed_added": "Matumizi yameongezwa",
-
   "purchases.report": "Ripoti",
   "purchases.purchases_total": "manunuzi — Jumla: {total}",
   "purchases.stat_total_spent": "Jumla ya Matumizi",
@@ -1120,7 +1076,6 @@
   "purchases.confirmed_updated": "Ununuzi umesasishwa",
   "purchases.confirmed_recorded": "Ununuzi umerekodiwa",
   "purchases.confirmed_deleted": "Imefutwa",
-
   "debts.title": "Madeni",
   "debts.report": "Ripoti",
   "debts.unpaid_total": "Haijalipwa: {total}",
@@ -1162,7 +1117,6 @@
   "debts.failed_reminder": "Imeshindwa kutuma ukumbusho",
   "debts.confirmed_reminders_sent": "Ukumbusho umetumwa",
   "debts.failed_to_load": "Imeshindwa kupakia madeni",
-
   "landing.nav_features": "Vipengele",
   "landing.nav_how_it_works": "Jinsi Inavyofanya",
   "landing.nav_pricing": "Bei",
@@ -1296,7 +1250,6 @@
   "landing.footer_rights": "Haki zote zimehifadhiwa.",
   "landing.footer_features": "Vipengele",
   "landing.footer_pricing": "Bei",
-
   "api.not_authorized": "Haijaidhinishwa",
   "api.token_failed": "Uthibitisho umeshindwa",
   "api.staff_not_found": "Mfanyakazi haipatikani",
@@ -1407,7 +1360,6 @@
   "api.debt_reminders_sent": "Ukumbusho wa madeni umetumwa",
   "api.items_restored": "Vitu vimerejeshwa",
   "api.items_deleted": "Vitu vimefutwa kabisa",
-
   "landing.brand_name": "UZANITE",
   "landing.footer_api": "API",
   "landing.aria_twitter": "Twitter",
@@ -1453,8 +1405,8 @@
   "scanner.restock_button": "Jaza Hisa",
   "scanner.restocked": "Hisa zimesasishwa kwa mafanikio",
   "scanner.camera_permission": "Ruhusa ya kamera imekatazwa. Tafadhali wezesha katika mipangilio.",
-    "scanner.camera_error": "Haiwezi kufikia kamera",
-    "scanner.not_supported": "Uchanganuzi wa barcode hautumiwi kwenye kifaa au kivinjari hiki.",
+  "scanner.camera_error": "Haiwezi kufikia kamera",
+  "scanner.not_supported": "Uchanganuzi wa barcode hautumiwi kwenye kifaa au kivinjari hiki.",
   "scanner.point_camera": "Elekeza kamera kwenye barcode",
   "scanner.hold_steady": "Shikilia imara na weka barcode ndani ya fremu",
   "pos.title": "Skani & Unda Agizo",
@@ -1546,5 +1498,19 @@
   "theme.desc": "Chagua UZANITE ionekaneje. Uteuzi wako hutumiwa katika mfumo mzima kwa akaunti yako.",
   "theme.light": "Nuru",
   "theme.dark": "Giza",
-  "theme.saved": "Mandhari imeboreshwa"
+  "theme.saved": "Mandhari imeboreshwa",
+  "approval.waiting_title": "Inasubiri idhini",
+  "approval.waiting_desc": "Tafadhali subiri msimamizi aidhinishe akaunti yako.",
+  "approval.whatsapp_title": "Uthibitishaji wa WhatsApp",
+  "approval.whatsapp_desc": "Unganisha WhatsApp yako ili kuendelea.",
+  "nav.dashboard": "Dashibodi",
+  "nav.orders": "Maagizo",
+  "nav.products": "Bidhaa",
+  "nav.expenses": "Gharama",
+  "nav.reports": "Ripoti",
+  "nav.business": "Mipangilio",
+  "nav.adminPanel": "Jopo la Usimamizi",
+  "nav.activityLog": "Shughuli",
+  "nav.recycleBin": "Kijalala",
+  "nav.notifications": "Arifa"
 }

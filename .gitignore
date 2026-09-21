@@ -35,3 +35,6 @@ client/android/local.properties
 /UZER_Full_Audit_Report.md
 /IMPLEMENTATION_CHECKLIST.md
 /PRODUCT_SETUP_GUIDE.md
+
+# Playwright MCP artifacts
+.playwright-mcp/

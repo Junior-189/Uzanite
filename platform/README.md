@@ -56,12 +56,21 @@ docker compose up --build
 
 See `gateway/nginx.conf`. In short:
 
-- `/api/v1/auth`, `/api/v1/tenants`, `/api/v1/billing`, `/api/v1/admin` → NestJS
-- everything else (`/api/*`, `/webhook`, `/uploads`, `/admin`, `/`) → Express
+- `/api/v1/*` → NestJS
+- everything else (`/api/*` without `v1`, `/webhook`, `/uploads`, `/admin`, `/`) → Express
 
-The Express app keeps owning Commerce, Catalog, Messaging, and Finance until
-their migration phases. Both apps share the same `JWT_SECRET` so tokens remain
-valid during the transition (HS256).
+Both apps share the same `JWT_SECRET` so tokens remain valid during the
+transition (HS256). The **client** decides whether a migrated domain's calls go
+to `/api/v1` or stay on legacy `/api`, via `VITE_API_V1` and the optional
+per-domain `VITE_API_V1_DOMAINS` (see `client/src/utils/apiRouting.ts`).
+
+Operational guides:
+
+- [`docs/DEPLOYMENT_RUNBOOK.md`](../docs/DEPLOYMENT_RUNBOOK.md) — topology, env
+  matrix, provisioning, migrations/rollback, proxy, worker, storage.
+- [`docs/CUTOVER_PLAYBOOK.md`](../docs/CUTOVER_PLAYBOOK.md) — staged per-domain
+  rollout, verification, and rollback.
+- [`docs/CUTOVER_COVERAGE.md`](../docs/CUTOVER_COVERAGE.md) — per-domain status.
 
 ## Row Level Security (optional, recommended in production)
 

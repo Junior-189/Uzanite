@@ -26,6 +26,8 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   // Notifications & Receipts (Phase M6)
   'Notification',
   'Receipt',
+  // Files (Phase M15)
+  'StoredFile',
   // Messaging (Phase M7)
   'WhatsAppAccount',
   'WhatsAppTemplate',
@@ -37,6 +39,14 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'FlowTrace',
   // Privacy / data-subject requests (Phase M13)
   'PrivacyRequest',
+  // Tenant staff accounts (Phase M17)
+  'Staff',
+  // Finance ledgers (Phase M18)
+  'Expense',
+  'Purchase',
+  'Debt',
+  // Broadcast (Phase M20)
+  'BroadcastLog',
 ]);
 
 // Models with an optional tenantId (global + per-tenant rows) are scoped

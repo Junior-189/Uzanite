@@ -1,0 +1,109 @@
+// Strangler cutover routing for the API client.
+//
+// The NestJS platform serves migrated domains under `/api/v1`; the legacy
+// Express app serves everything under `/api`. During the transition the client
+// talks to BOTH, domain by domain. This module decides which base a given path
+// uses.
+//
+// Cutover is OFF by default (`VITE_API_V1` unset). It must only be enabled in
+// an environment where the platform is actually deployed, because a wave path
+// sent to an undeployed platform fails. Endpoints that exist only on the legacy
+// app keep using legacy even when the flag is on.
+
+export const LEGACY_BASE: string = (import.meta.env.VITE_API_URL as string) || '/api';
+export const PLATFORM_BASE: string = (import.meta.env.VITE_PLATFORM_API_URL as string) || '/api/v1';
+
+// Wave-1 cutover is deliberately narrow: AUTH only. The platform's admin and
+// billing APIs do not yet match this client's call shapes (`/admin/users`,
+// `/admin/stats`, feature flags, … all remain legacy), so routing them now would
+// misroute live requests. Widen this list as each domain's call sites are
+// reconciled and proven with the parity harness.
+// Domains the platform fully covers AND whose client contract matches. Added
+// incrementally as each is proven with the parity harness.
+const DEFAULT_PLATFORM_PREFIXES = [
+  '/auth',
+  '/tenants',
+  '/billing',
+  '/notifications',
+  '/dashboard',
+  '/payments',
+  '/files',
+  '/contacts',
+  '/recycle-bin',
+  '/products',
+  '/orders',
+  '/expenses',
+  '/purchases',
+  '/debts',
+  '/reports',
+  '/broadcast',
+  '/whatsapp',
+  '/chat',
+  '/privacy',
+  '/staff',
+  // Admin-users sub-paths only. `/admin/feature-flags` and
+  // `/admin/activity-logs|login-attempts` remain legacy until those domains
+  // are migrated, so `/admin` as a whole is intentionally NOT routed.
+  '/admin/users',
+  '/admin/sub-admins',
+  '/admin/stats',
+  '/admin/impersonate',
+  '/admin/feature-flags',
+  '/admin/activity-logs',
+  '/admin/login-attempts',
+] as const;
+
+// Per-release cutover control. `VITE_API_V1_DOMAINS` is a comma-separated
+// subset (bare `auth` or rooted `/auth`); when set, ONLY those domains route to
+// the platform. This lets an operator widen or roll back the migration one
+// domain at a time without a code change — see docs/CUTOVER_PLAYBOOK.md.
+// Unset/empty falls back to the full set above.
+const OVERRIDE_DOMAINS: readonly string[] = ((import.meta.env.VITE_API_V1_DOMAINS as string) || '')
+  .split(',')
+  .map((d) => d.trim())
+  .filter(Boolean)
+  .map((d) => (d.startsWith('/') ? d : `/${d}`));
+
+export const PLATFORM_PREFIXES: readonly string[] =
+  OVERRIDE_DOMAINS.length > 0 ? OVERRIDE_DOMAINS : DEFAULT_PLATFORM_PREFIXES;
+
+// Flows the platform does not implement yet — always legacy, even when the
+// domain prefix is otherwise routed. Currently empty: the last entry
+// (`/auth/staff`) was unused (no legacy route, no client caller). The mechanism
+// remains for any future legacy-only exception.
+export const LEGACY_ONLY_PREFIXES: readonly string[] = [];
+
+export const platformCutoverEnabled: boolean = (import.meta.env.VITE_API_V1 as string) === 'true';
+
+function normalize(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+export function isLegacyOnly(path: string): boolean {
+  const p = normalize(path);
+  return LEGACY_ONLY_PREFIXES.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+}
+
+export function isPlatformPath(path: string): boolean {
+  const p = normalize(path);
+  return PLATFORM_PREFIXES.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+}
+
+/** Returns the base URL to use for `path` under the current cutover flag. */
+export function apiBaseFor(path: string): string {
+  if (!platformCutoverEnabled) return LEGACY_BASE;
+  if (isLegacyOnly(path)) return LEGACY_BASE;
+  if (isPlatformPath(path)) return PLATFORM_BASE;
+  return LEGACY_BASE;
+}
+
+/** Absolute URL for a path, honoring the cutover routing. */
+export function resolveApiUrl(path: string): string {
+  const p = normalize(path);
+  return `${apiBaseFor(p)}${p}`;
+}
+
+/** True when `path` would be served by the platform right now. */
+export function isRoutedToPlatform(path: string): boolean {
+  return platformCutoverEnabled && !isLegacyOnly(path) && isPlatformPath(path);
+}
